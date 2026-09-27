@@ -208,6 +208,20 @@ public static class Idas3Build
         BuildPlayer("Builds/Current/InitialDUnity.exe",scenePath);
     }
 
+    public static void BuildMultiInputPlayer()
+    {
+        if(Application.unityVersion!="6000.6.0f1"||UnityEngine.InputSystem.InputSystem.version.ToString()!="1.19.0")
+            throw new InvalidOperationException("Sample requires Unity 6000.6.0f1 / Input System 1.19.0.");
+        Idas3DeviceSnapshotChecks.Run();Idas3ControllerFoundationChecks.Run();Idas3MultiInputChecks.Run();
+        Configure();var product=PlayerSettings.productName;var version=PlayerSettings.bundleVersion;
+        try {
+            PlayerSettings.productName=Idas3SampleBuild.ProductName;
+            PlayerSettings.bundleVersion="0.3.95-multi-input."+(Environment.GetEnvironmentVariable("ID3_SOURCE_COMMIT")??"local");AssetDatabase.SaveAssets();
+            BuildPlayer("Builds/MultiInputSample/InitialDUnity.exe","Assets/Scenes/InitialDUnityScene.unity");
+            File.WriteAllText("Builds/MultiInputSample/READ ME.txt",File.ReadAllText("docs/MULTI_INPUT_SAMPLE.md")+"\n\n"+File.ReadAllText("docs/MULTI_INPUT_UAT.md"));
+        } finally {PlayerSettings.productName=product;PlayerSettings.bundleVersion=version;AssetDatabase.SaveAssets();}
+    }
+
     public static void BuildTestPlayer()
     {
         Configure();

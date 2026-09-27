@@ -1,0 +1,190 @@
+name: Multi-input sample validation
+on:
+  workflow_dispatch:
+  push:
+    branches: [ID3-Multi-device-input]
+    paths: ['Assets/**', 'Native/**', 'RuntimeAssets/**', 'Packages/**', 'ProjectSettings/**', 'Diagnostics/**', 'Tests/**', 'Tools/**', 'docs/**', 'Build Native.cmd', '.github/workflows/multi-input-sample.yml']
+  pull_request:
+    branches: [ID3-Multi-device-input]
+    paths: ['Assets/**', 'Native/**', 'RuntimeAssets/**', 'Packages/**', 'ProjectSettings/**', 'Diagnostics/**', 'Tests/**', 'Tools/**', 'docs/**', 'Build Native.cmd', '.github/workflows/multi-input-sample.yml']
+permissions:
+  contents: read
+concurrency:
+  group: multi-input-${{ github.ref }}
+  # Do not interrupt activated Unity midway through license return.
+  cancel-in-progress: false
+jobs:
+  portable:
+    name: Portable diagnostic, UAT, Controller, snapshots and multi-input
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          sparse-checkout: |
+            Assets/Scripts
+            Diagnostics/DeviceIdentityProbe
+            Tests
+            Tools
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0.x'
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - run: python Tools/CI/Run-Portable.py
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: portable-${{ github.sha }}
+          path: |
+            Verification/ci/portable/*.txt
+            Verification/ci/portable/result.json
+          retention-days: 14
+  native:
+    name: Windows native DLLs and applicable checks
+    runs-on: windows-2022
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            Native/src
+            Native/tests
+            Assets/Plugins
+            Tools/CI
+      - shell: pwsh
+        run: ./Tools/CI/Build-Native.ps1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: native-${{ github.sha }}
+          path: Verification/ci/native
+          retention-days: 14
+  unity-readiness:
+    name: Unity activation readiness (not a build)
+    runs-on: ubuntu-24.04
+    outputs:
+      ready: ${{ steps.check.outputs.ready }}
+    steps:
+      - if: github.event_name == 'pull_request'
+        run: echo 'SKIPPED Unity by PR trust policy; no activation credentials used.' >> "$GITHUB_STEP_SUMMARY"
+      - id: check
+        if: github.event_name != 'pull_request'
+        env:
+          CI_ROUTE: ${{ vars.ID3_UNITY_CI }}
+          SERIAL: ${{ secrets.UNITY_SERIAL }}
+          EMAIL: ${{ secrets.UNITY_EMAIL }}
+          PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+        shell: bash
+        run: |
+          if [[ "$EVENT" == pull_request || "$REF" != refs/heads/ID3-Multi-device-input ]]; then
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'SKIPPED: licensed builds only run on the reviewed working branch, never PR code.' >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$CI_ROUTE" == pro-serial && -n "$SERIAL" && -n "$EMAIL" && -n "$PASSWORD" ]]; then
+            echo 'ready=true' >> "$GITHUB_OUTPUT"
+            echo 'READY to attempt activation; this does not establish license validity or a build pass.' >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo 'ready=false' >> "$GITHUB_OUTPUT"
+            echo 'BLOCKED: configure ID3_UNITY_CI=pro-serial and UNITY_SERIAL / UNITY_EMAIL / UNITY_PASSWORD secrets for an eligible license, or use the documented owner-machine handoff. Personal activation uses Unity Hub. Portable/native results are independent.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+  unity:
+    name: Windows Unity ${{ matrix.kind }} validation and package
+    needs: [native, unity-readiness]
+    if: ${{ always() && !cancelled() && needs.unity-readiness.outputs.ready == 'true' }}
+    runs-on: windows-2022
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        kind: [probe, game]
+    # One activation at a time across branch/manual runs; no paid runner is provisioned.
+    concurrency:
+      group: id3-unity-license
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: matrix.kind == 'probe'
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            Diagnostics/DeviceIdentityProbe
+            Tools/CI
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        if: matrix.kind == 'game'
+        with:
+          persist-credentials: false
+          lfs: true
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        if: matrix.kind == 'game'
+        with:
+          name: native-${{ github.sha }}
+          path: Verification/ci/native
+      - if: matrix.kind == 'game'
+        shell: pwsh
+        run: Copy-Item Verification/ci/native/plugins/*.dll Assets/Plugins/x86_64 -Force
+      - shell: pwsh
+        run: ./Tools/CI/Install-Unity.ps1
+      - name: Activate, build, return license
+        shell: pwsh
+        env:
+          UNITY_SERIAL: ${{ secrets.UNITY_SERIAL }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+          BUILD_KIND: ${{ matrix.kind }}
+        run: ./Tools/CI/Run-LicensedBuild.ps1 -Kind $env:BUILD_KIND
+      - name: Retain prerequisite failure status
+        if: always()
+        shell: pwsh
+        env:
+          BUILD_KIND: ${{ matrix.kind }}
+          SOURCE_SHA: ${{ github.sha }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          $dir="Verification/ci/$env:BUILD_KIND"
+          New-Item -ItemType Directory -Force $dir | Out-Null
+          if (-not (Test-Path "$dir/result.json")) {
+            @{status=$env:JOB_STATUS; sourceCommit=$env:SOURCE_SHA; build='NOT RUN'; reason='Setup/activation did not reach the builder; inspect job console.'; hardware='NOT TESTED'} | ConvertTo-Json | Set-Content "$dir/result.json"
+          }
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: unity-${{ matrix.kind }}-${{ github.sha }}
+          path: Verification/ci/${{ matrix.kind }}
+          retention-days: 7
+  result:
+    name: Sample readiness (all required builds)
+    needs: [portable, native, unity-readiness, unity]
+    if: always()
+    runs-on: ubuntu-24.04
+    steps:
+      - env:
+          PORTABLE: ${{ needs.portable.result }}
+          NATIVE: ${{ needs.native.result }}
+          READY: ${{ needs.unity-readiness.outputs.ready }}
+          UNITY: ${{ needs.unity.result }}
+          EVENT: ${{ github.event_name }}
+          SHA: ${{ github.sha }}
+        shell: bash
+        run: |
+          echo "Source: $SHA; portable: $PORTABLE; Windows native: $NATIVE; Unity matrix: $UNITY; hardware: NOT TESTED." >> "$GITHUB_STEP_SUMMARY"
+          if [[ "$PORTABLE" != success || "$NATIVE" != success ]]; then
+            echo 'FAILED: a portable/native requirement failed or was cancelled.' >> "$GITHUB_STEP_SUMMARY"; exit 1
+          elif [[ "$EVENT" == pull_request ]]; then
+            echo 'SKIPPED Unity by trust policy. This PR check is not a playable-build result.' >> "$GITHUB_STEP_SUMMARY"
+          elif [[ "$READY" != true ]]; then
+            echo 'BLOCKED: Unity activation prerequisites missing; no complete sample build.' >> "$GITHUB_STEP_SUMMARY"; exit 1
+          elif [[ "$UNITY" != success ]]; then
+            echo 'FAILED: inspect the separate probe/game jobs and failure logs.' >> "$GITHUB_STEP_SUMMARY"; exit 1
+          else
+            echo 'PASSED build checks and packaging. Download complete ZIPs; rendered UI, runtime and hardware acceptance remain pending.' >> "$GITHUB_STEP_SUMMARY"
+          fi
