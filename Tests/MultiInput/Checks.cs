@@ -84,6 +84,7 @@ static class Checks {
                 for(int i=0;i<10000;++i){many.Tick(false);integrated.Poll(noKeys,default,time,many.Controls,many.Snapshot);frame=default;integrated.ApplyDriving(ref frame);}timer.Stop();
                 Console.WriteLine("PERF complete provider + multi-input integration (8 devices x 32 controls): "+((GC.GetAllocatedBytesForCurrentThread()-bytes)/10000.0).ToString("F1")+" bytes/frame, "+(timer.Elapsed.TotalMilliseconds*1000/10000).ToString("F2")+" us; portable adapters, not Unity/Windows.");
             }
+            count += OwnershipChecks.Run(Path.Combine(root, "ownership"));
             Console.WriteLine("PASS "+count+" production multi-input checks; no Unity/Windows/hardware claim.");
         }finally{if(Directory.Exists(root))Directory.Delete(root,true);}
     }

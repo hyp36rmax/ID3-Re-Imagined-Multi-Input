@@ -79,6 +79,11 @@ static class Checks {
             var optionsReload=new Idas3GameOptions(new Platform());optionsReload.Initialize(Path.Combine(root,"options"));Check(optionsReload.Current.wheelFeedbackStrength==.61f,"FFB compatible reload");
             platform.fail=true;options.Draft.wheelFeedbackStrength=.19f;Check(!options.ApplyWheelSettings(),"FFB failure reported");
             Check(options.Current.wheelFeedbackStrength==.61f&&options.Draft.wheelFeedbackStrength==.19f&&options.Draft.musicVolume==.23f,"FFB failure restores current and retains draft");
+            Idas3GameOptions.CopyWheelSettings(options.Current, options.Draft);
+            File.AppendAllText(options.FilePath, "\n ");
+            string unchangedOptions=File.ReadAllText(options.FilePath);
+            Check(options.ApplyWheelSettings(),"unchanged FFB bypasses failing platform and persistence");
+            Check(File.ReadAllText(options.FilePath)==unchangedOptions&&options.Draft.musicVolume==.23f,"input-only save preserves original options bytes and unrelated drafts");
             // Exercise the shared save coordinator with real binding/options persistence.
             var combined=new B();combined.Initialize(Path.Combine(root,"combined"));combined.BeginEdit();Check(combined.ApplyDraft(),"combined fixture");
             platform.fail=false;options.Draft.wheelFeedbackStrength=.37f;

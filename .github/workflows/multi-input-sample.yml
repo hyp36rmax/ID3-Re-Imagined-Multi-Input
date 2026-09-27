@@ -54,6 +54,7 @@ jobs:
           sparse-checkout: |
             Native/src
             Native/tests
+            Native/tools
             Assets/Plugins
             Tools/CI
       - shell: pwsh

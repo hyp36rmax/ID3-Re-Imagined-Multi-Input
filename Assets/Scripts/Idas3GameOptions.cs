@@ -219,14 +219,32 @@ public sealed class Idas3GameOptions
     }
     // The customization panel commits its own transaction while retaining any
     // unrelated edits in the main settings draft, including pending display edits.
-    public bool ApplyWheelSettings(){
-        EnsureInitialized();if(DisplayConfirmationPending)return false;
-        var pending=draft.Clone();draft=current.Clone();CopyWheelSettings(pending,draft);
-        bool applied=ApplyDraft();if(applied)CopyWheelSettings(current,pending);draft=pending;return applied;
+    public bool ApplyWheelSettings()
+    {
+        EnsureInitialized();
+        if (DisplayConfirmationPending) return false;
+        // Saving only new input assignments must not rewrite the original options file.
+        if (WheelSettingsEqual(current, draft)) { LastError = null; return true; }
+        var pending = draft.Clone();
+        draft = current.Clone();
+        CopyWheelSettings(pending, draft);
+        bool applied = ApplyDraft();
+        if (applied) CopyWheelSettings(current, pending);
+        draft = pending;
+        return applied;
     }
-    public static void CopyWheelSettings(Values from,Values to){
-        to.wheelForceFeedback=from.wheelForceFeedback;to.wheelFeedbackStrength=from.wheelFeedbackStrength;
-        to.wheelFeedbackInvert=from.wheelFeedbackInvert;to.wheelFeedbackDevice=from.wheelFeedbackDevice;
+    internal static bool WheelSettingsEqual(Values left, Values right) =>
+        left.wheelForceFeedback == right.wheelForceFeedback &&
+        left.wheelFeedbackStrength == right.wheelFeedbackStrength &&
+        left.wheelFeedbackInvert == right.wheelFeedbackInvert &&
+        string.Equals(left.wheelFeedbackDevice, right.wheelFeedbackDevice, StringComparison.Ordinal);
+
+    public static void CopyWheelSettings(Values from, Values to)
+    {
+        to.wheelForceFeedback = from.wheelForceFeedback;
+        to.wheelFeedbackStrength = from.wheelFeedbackStrength;
+        to.wheelFeedbackInvert = from.wheelFeedbackInvert;
+        to.wheelFeedbackDevice = from.wheelFeedbackDevice;
     }
     public bool ApplyHudCustomization(Values appearance,bool includeLayout=false){
         EnsureInitialized();if(DisplayConfirmationPending)return false;

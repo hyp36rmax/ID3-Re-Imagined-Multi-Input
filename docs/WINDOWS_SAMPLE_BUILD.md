@@ -1,6 +1,10 @@
 # Windows sample build and Actions handoff
 
-## Status at this local review
+## Current review update — 2026-09-27
+
+[Published 2a32bfd run](https://github.com/hyp36rmax/ID3-Re-Imagined-Multi-Input/actions/runs/36341394023): portable passed; Windows native CMake generation failed because sparse checkout omitted `Native/tools`; Unity activation inputs were absent and Unity jobs skipped. Only portable/native failure reports exist, no player ZIP. The local ownership-review follow-up includes `Native/tools` in the checkout, pending review and an actual Windows rerun. See [exact evidence and ownership review](INPUT_CONFIGURATION_OWNERSHIP.md).
+
+## Historical status when the build workflow was introduced
 
 No Actions run, Windows DLL build, Unity semantic build, player artifact or hardware acceptance has occurred for this change. The local host is an ARM Mac without Unity or an accessible configured Windows rig. A GitHub-hosted Windows route is prepared; local OS absence does not make that route unavailable. Repository secret/activation status has not been established. No purchase, new license arrangement, paid runner, release or repository setting change has been performed.
 
