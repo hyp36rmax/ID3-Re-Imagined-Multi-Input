@@ -20,7 +20,7 @@ public static class Idas3ControllerMenuChecks
             var bindings=new Idas3ControlBindings();bindings.Initialize(root);
             var menu=go.AddComponent<Idas3PauseMenu>();menu.Initialize(options);menu.InitializeBindings(bindings);menu.OpenAttractOptions();
             Check(menu.CategoryFocused,"Attract category focus");
-            foreach(int tab in new[]{0,1,2,3,5,6,7}){
+            foreach(int tab in new[]{0,1,2,3,4,5,6,7}){
                 Check(menu.SelectedTab==tab,"Category traversal");menu.Activate();Check(!menu.CategoryFocused,"Enter category");
                 menu.Back();Check(menu.IsOpen&&menu.CategoryFocused,"Back preserves settings screen");menu.Navigate(1);
             }

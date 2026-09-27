@@ -59,6 +59,16 @@ static class Checks {
                 Check(File.ReadAllText(compat.FilePath)==json,"loading does not rewrite version "+version);
             }
             var platform=new Platform();var options=new Idas3GameOptions(platform);options.Initialize(Path.Combine(root,"options"));
+            var savedFeedback=new Idas3GameOptions.Values();var draftFeedback=new Idas3GameOptions.Values();
+            savedFeedback.wheelForceFeedback=false;draftFeedback.wheelForceFeedback=true;
+            string feedback=Idas3ControllerStatus.Feedback(savedFeedback,draftFeedback,false,"Force feedback is off.");
+            Check(feedback.Contains("Saved enable: OFF")&&feedback.Contains("Pending FFB changes")&&feedback.Contains("Backend: Force feedback is off."),"draft ON does not replace saved/runtime OFF");
+            draftFeedback.wheelForceFeedback=false;draftFeedback.wheelFeedbackStrength=savedFeedback.wheelFeedbackStrength+.1f;
+            Check(Idas3ControllerStatus.Feedback(savedFeedback,draftFeedback,false,null).Contains("Pending FFB changes"),"strength-only edit is pending");
+            Idas3GameOptions.CopyWheelSettings(savedFeedback,draftFeedback);
+            Check(Idas3ControllerStatus.Feedback(savedFeedback,draftFeedback,false,null).Contains("FFB settings saved."),"identical settings have no pending claim");
+            Check(Idas3ControllerStatus.Feedback(savedFeedback,draftFeedback,true,"active").Contains("Multi-input blocks force output"),"multi-input ownership block explicit");
+            Check(Idas3ControllerStatus.Configuration(false,true).Contains("Active: Existing controls | Draft: Multi-input"),"pending mode distinguished from active configuration");
             options.BeginEdit();Check(options.ApplyDraft(),"options fixture");string oldOptions=File.ReadAllText(options.FilePath);
             options.Draft.musicVolume=.23f;options.Draft.width=1920;options.Draft.wheelForceFeedback=true;options.Draft.wheelFeedbackStrength=.61f;
             options.Draft.wheelFeedbackInvert=true;options.Draft.wheelFeedbackDevice="synthetic-output";

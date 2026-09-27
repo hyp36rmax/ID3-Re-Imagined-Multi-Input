@@ -28,7 +28,14 @@ public static class Idas3ControllerFoundationChecks
             bindings.BeginEdit();Check(bindings.ApplyDraft(),"initial binding fixture");string savedBindings=File.ReadAllText(bindings.FilePath);
             var menu=go.AddComponent<Idas3PauseMenu>();menu.Initialize(options);menu.InitializeBindings(bindings);menu.InitializeControllerDevices(devices);menu.OpenAttractOptions();menu.SelectTab(3);
             bindings.Poll(k=>false,default,0,devices.Controls);
-            for(int page=0;page<5;++page){menu.SelectControllerPage(page);Check(menu.ControllerPage==page&&menu.IsOpen,"all five pages reachable");}
+            for(int page=0;page<5;++page){menu.SelectControllerPage(page);Check(menu.SelectedTab==4&&menu.ControllerPage==page&&menu.IsOpen,"all five pages reachable");}
+            menu.SelectTab(3);Check(menu.SelectedTab==3,"CONTROLS stays a separate category");
+            bindings.ClearDraft(Idas3ControlBindings.ActionId.Camera,Idas3ControlBindings.Slot.Primary);
+            var sharedDraft=bindings.Draft.Clone();menu.SelectTab(4);
+            Check(menu.SelectedTab==4&&Idas3ControlBindings.Equivalent(sharedDraft,bindings.Draft),"WHEEL preserves CONTROLS pending bindings");
+            menu.SelectTab(3);Check(Idas3ControlBindings.Equivalent(sharedDraft,bindings.Draft)&&File.ReadAllText(bindings.FilePath)==savedBindings,"category navigation neither saves nor replaces draft");
+            menu.SelectBindingColumn(0);menu.Activate();Check(menu.BindingChoiceVisible,"familiar CONTROLS table opens shared binding chooser");menu.Back();
+            bindings.CancelEdit(false);
             menu.SelectControllerPage(0);menu.Navigate(1);menu.Navigate(1);menu.Activate();Check(bindings.IsCapturing,"Quick Setup uses real capture");
             menu.Back();bindings.Poll(k=>false,default,1,devices.Controls);menu.Back();
             Check(File.ReadAllText(bindings.FilePath)==savedBindings&&!bindings.HasUnsavedChanges,"Quick Setup cancel retains saved/draft assignments");
@@ -53,6 +60,16 @@ public static class Idas3ControllerFoundationChecks
                 Check(!bindings.HasUnsavedChanges&&!devices.SelectionHasChanges&&options.Current.wheelFeedbackStrength==options.Draft.wheelFeedbackStrength,"Save Changes on page "+page+" commits all Controller services");
                 Check(options.Draft.musicVolume==.23f&&options.Current.musicVolume!=.23f,"save retains unrelated draft on page "+page);
             }
+            menu.SelectTab(3);options.Draft.wheelFeedbackStrength=.83f;
+            // Familiar CONTROLS has one device row, ten action rows, then Discard / Save / Back.
+            for(int n=0;n<12;++n)menu.Navigate(1);menu.Activate();
+            Check(options.Current.wheelFeedbackStrength==.83f&&options.Draft.musicVolume==.23f,"CONTROLS Save uses shared scoped coordinator");
+            menu.SelectTab(3);options.Draft.wheelFeedbackStrength=.72f;
+            for(int n=0;n<11;++n)menu.Navigate(1);menu.Activate();
+            Check(options.Draft.wheelFeedbackStrength==.83f&&options.Draft.musicVolume==.23f,"CONTROLS Discard preserves unrelated drafts");
+            menu.SelectControllerPage(1);
+            for(int n=0;n<7;++n)menu.Navigate(1);menu.Activate();
+            Check(menu.CategoryFocused,"WHEEL Back footer remains reachable by directional navigation");
             menu.SelectControllerPage(1);options.Draft.wheelFeedbackStrength=.91f;platform.fail=true;
             for(int n=0;n<5;++n)menu.Navigate(1);menu.Activate();
             menu.SetOpen(false);Check(menu.IsOpen&&options.Draft.wheelFeedbackStrength==.91f,"partial save cannot silently close and discard");
