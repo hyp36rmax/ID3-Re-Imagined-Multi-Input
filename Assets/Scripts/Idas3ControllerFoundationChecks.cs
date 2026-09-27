@@ -49,7 +49,7 @@ public static class Idas3ControllerFoundationChecks
             Check(options.Draft.wheelForceFeedback!=previous&&options.Current.wheelForceFeedback==previous,"FFB page edits draft only without backend");
             menu.SetOpen(false);Check(File.ReadAllText(deviceFile)==savedDevice&&File.ReadAllText(bindings.FilePath)==savedBindings,"no implicit saves across pages");
             menu.OpenAttractOptions();menu.SelectTab(3);
-            int[] pageRows={6,4,12,3,6};
+            int[] pageRows={9,4,13,3,6};
             for(int page=0;page<5;++page){
                 menu.SelectControllerPage(page);bindings.Poll(k=>false,default,10+page,devices.Controls,devices.Snapshot);
                 bindings.ClearDraft(Idas3ControlBindings.ActionId.Camera,Idas3ControlBindings.Slot.Primary);

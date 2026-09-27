@@ -37,7 +37,7 @@ static class Checks {
             Check(frame.padButtons==0x2000,"only assigned shift contributes; active-device raw bits suppressed");
             var preview=b.EvaluateDraftDriving();Check(frame.thumbLX==preview.thumbLX&&frame.rightTrigger==preview.rightTrigger&&frame.leftTrigger==preview.leftTrigger&&frame.padButtons==preview.padButtons,"gameplay and Test Controls share evaluated assignments");
             var menuFrame=default(Idas3Native.FrameInput);b.ApplyMenu(ref menuFrame,false);
-            Check(menuFrame.padConnected==1&&(menuFrame.padButtons&0x2000)!=0&&(menuFrame.key0&(1u<<8))!=0,"experimental menu back works even when existing selection supplies no connected pad");
+            Check(menuFrame.padConnected==1&&menuFrame.padButtons==0&&(menuFrame.key0&(1u<<8))==0,"driving bindings never implicitly generate menu Back");
             var historical=provider.Snapshot;time+=1;b.Poll(_=>false,default,time,null,historical);frame=default;b.ApplyDriving(ref frame);
             Check(frame.thumbLX==0&&frame.rightTrigger==0&&frame.padButtons==0,"aged samples neutralized explicitly");
             Poll();b.Poll(_=>false,default,time,null,historical);frame=default;b.ApplyDriving(ref frame);Check(frame.rightTrigger==0,"out-of-order frame cannot revive earlier samples");
@@ -84,6 +84,7 @@ static class Checks {
                 for(int i=0;i<10000;++i){many.Tick(false);integrated.Poll(noKeys,default,time,many.Controls,many.Snapshot);frame=default;integrated.ApplyDriving(ref frame);}timer.Stop();
                 Console.WriteLine("PERF complete provider + multi-input integration (8 devices x 32 controls): "+((GC.GetAllocatedBytesForCurrentThread()-bytes)/10000.0).ToString("F1")+" bytes/frame, "+(timer.Elapsed.TotalMilliseconds*1000/10000).ToString("F2")+" us; portable adapters, not Unity/Windows.");
             }
+            count += MenuNavigationChecks.Run(Path.Combine(root, "menu"));
             count += OwnershipChecks.Run(Path.Combine(root, "ownership"));
             Console.WriteLine("PASS "+count+" production multi-input checks; no Unity/Windows/hardware claim.");
         }finally{if(Directory.Exists(root))Directory.Delete(root,true);}

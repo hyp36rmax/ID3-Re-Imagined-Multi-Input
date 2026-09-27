@@ -395,6 +395,12 @@ public sealed class Idas3SceneGame : MonoBehaviour
             // Keep capture's release latch until focused hardware is neutral.
             else controlBindings.Poll(physicalKey, physicalPad, Time.realtimeSinceStartupAsDouble,
                 diagnosticPad ? null : controllerDevices.Controls,controllerDevices.Snapshot);
+            // Separate menu excursions from driving. Testing consumes the draft events only.
+            int wheelMenuContext = pauseMenu.TestingControls ? 3 : pauseMenu.IsOpen ? 2 :
+                multiplayerMenu.BlocksGameInput ? 4 : raceMusicMenu.IsOpen ? 5 :
+                (Status.flags & 1u) != 0 ? 100 + (Status.frontendStage << 8) + Status.attractChild :
+                (Status.flags & (32u | 512u | 1024u | 4096u)) != 0 || Status.racePhase >= 3 ? 6 : 0;
+            controlBindings.EvaluateMenuNavigation(wheelMenuContext, Focused, pauseMenu.TestingControls);
             if(pauseMenu.TestingControls){
                 for(int action=0;action<10;++action)controllerTestActions[action]=controlBindings.DraftActionHeld((Idas3ControlBindings.ActionId)action);
                 pauseMenu.SetControllerTestSample(controlBindings.EvaluateDraftDriving(),controllerTestActions,Focused,controlBindings.SuppressInput);
@@ -965,7 +971,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 previousMenuInput=raw;NeutralizeControls(ref frame);menuNavigationAxis=0;return;
             }
         }
-        pauseMenu.SetWheelNavigation(controllerDevices.ActiveIsGeneric);
+        pauseMenu.SetWheelNavigation(!controlBindings.ExperimentalEnabled && controllerDevices.ActiveIsGeneric);
         bool pressed(int key) => Held(raw, key) && !Held(previousMenuInput, key);
         uint pressedButtons = raw.padButtons & ~previousMenuInput.padButtons;
         // PauseHeld already translates the bound controller control to Escape.
@@ -983,7 +989,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 -(Held(raw,37)||(raw.padButtons&4)!=0||raw.thumbLX < -16000?1:0);
             multiplayerMenu.ProcessMenuNavigation(horizontal,vertical,Held(raw,13)||(raw.padButtons&0x1000)!=0,
                 Held(raw,8)||(raw.padButtons&0x2000)!=0,(raw.flags&1)==0||controlBindings.SuppressInput,
-                Time.realtimeSinceStartupAsDouble,controllerDevices.ActiveIsGeneric);
+                Time.realtimeSinceStartupAsDouble,!controlBindings.ExperimentalEnabled && controllerDevices.ActiveIsGeneric);
             NeutralizeControls(ref frame);
         }
         else if ((raw.flags & 1) != 0)

@@ -2,7 +2,7 @@
 
 ## Current review update — 2026-09-27
 
-[Published 2a32bfd run](https://github.com/hyp36rmax/ID3-Re-Imagined-Multi-Input/actions/runs/36341394023): portable passed; Windows native CMake generation failed because sparse checkout omitted `Native/tools`; Unity activation inputs were absent and Unity jobs skipped. Only portable/native failure reports exist, no player ZIP. The local ownership-review follow-up includes `Native/tools` in the checkout, pending review and an actual Windows rerun. See [exact evidence and ownership review](INPUT_CONFIGURATION_OWNERSHIP.md).
+[Published ad3a18f run](https://github.com/hyp36rmax/ID3-Re-Imagined-Multi-Input/actions/runs/36343935859): portable and Windows native passed. Both native DLLs built and all three native tests passed. This confirms the Native/tools checkout correction. Unity activation inputs were absent; Unity jobs skipped and readiness failed. Native DLL/report artifacts exist, but no complete player ZIP. This local navigation follow-up has not run in CI. See [navigation and build evidence](WHEEL_MENU_NAVIGATION.md).
 
 ## Historical status when the build workflow was introduced
 
@@ -28,7 +28,7 @@ Official references: [pinned editor release/installers](https://unity.com/releas
 
 `.github/workflows/multi-input-sample.yml` declares manual dispatch and path-filtered push/PR triggers for `ID3-Multi-device-input`. Read-only repository permissions; pinned action commits; 14-day portable/native and 7-day Unity artifact retention. No releases or writes to branches/settings. PRs run portable/native checks but never receive licensed builds. The Unity matrix expands into separate probe/game jobs, runs serially, and does not stop the probe just because the game native job failed. The game requires matching native DLLs and their exact SHA/hash report.
 
-1. **Portable:** 34 diagnostic + 46 UAT, 50 Controller, 101 snapshot/provider and current multi-input checks; probe access audit, portable native JSON and packaging boundaries. The old diagnostic-only whole-repository diff check remains available by default; CI explicitly selects `--access-only` because later production work was authorized.
+1. **Portable:** 34 diagnostic + 46 UAT, 57 Controller, 101 snapshot/provider and current multi-input checks; probe access audit, portable native JSON and packaging boundaries. The old diagnostic-only whole-repository diff check remains available by default; CI explicitly selects `--access-only` because later production work was authorized.
 2. **Windows native:** actual MSVC DLL compilation plus steering smoothing, original FFB calculation and owner lifecycle unit checks. No GPU/ROM tests or device output.
 3. **Unity probe:** existing isolated `Build-Probe.ps1`, actual JsonUtility round trips, native/managed identity agreement and a synthetic UAT baseline/restart/export using actual Unity serialization. Full probe player and reviewed docs are zipped. Rendered UAT UI and physical baseline/restart remain pending.
 4. **Unity game:** actual import/compilation, snapshot/Controller/multi-input Unity synthetic checks, separate sample product, existing full-game staging and verified packaging. A standalone probe PASS cannot replace this job.

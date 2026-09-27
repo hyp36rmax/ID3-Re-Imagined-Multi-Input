@@ -99,7 +99,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
     private void SetOpen(bool open,bool attractContext){
         blockThroughFrame=Time.frameCount+1;if(open==IsOpen)return;
         if(!open&&controllerSaveIncomplete){notice=controllerSaveMessage;return;}
-        IsOpen=open;bindingChoice=false;
+        IsOpen=open;bindingChoice=false;bindings?.DisarmMenuNavigation();
         if(open){
             AttractOptions=attractContext;
             previousCursorVisible=Cursor.visible;previousCursorLock=Cursor.lockState;
@@ -124,7 +124,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
         if(!IsOpen)SetOpen(true);
         if(bindings!=null&&bindings.IsCapturing)return;
         if(controllerSaveIncomplete&&index!=3&&index!=4){notice=controllerSaveMessage;return;}
-        if(index!=tab){if(!controllerSaveIncomplete&&quickStep<6)CancelQuickSetup();controllerTesting=false;}
+        if(index!=tab){bindings?.DisarmMenuNavigation();if(!controllerSaveIncomplete&&quickStep<6)CancelQuickSetup();controllerTesting=false;}
         if(!showOptions){options.BeginEdit();bindings?.BeginEdit();}showOptions=true;tab=Wrap(index,Tabs.Length);selection=1;wheelEditing=false;notice="";
         if(tab==3&&controllerDevices!=null)bindingColumn=controllerDevices.Controls.Count>0?3:0;
         if(tab==4)wheelFeedback?.RefreshDevices();
@@ -206,8 +206,8 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
     public void CancelDiagnosticCapture(){diagnosticTarget=null;}
     private bool BindingInputBlocked=>bindings!=null&&(bindings.IsCapturing||bindings.SuppressInput);
     private bool Modal=>bindingChoice||pending!=Command.None||options.DisplayConfirmationPending||(bindings!=null&&bindings.IsCapturing);
-    private int BindingFirstSelection=>tab==4?3:controllerDevices!=null?2:1;
-    private bool DeviceRowSelected=>controllerDevices!=null&&selection==BindingFirstSelection-1;
+    private int BindingFirstSelection=>tab==4?4:controllerDevices!=null?2:1;
+    private bool DeviceRowSelected=>controllerDevices!=null&&selection==(tab==4?2:BindingFirstSelection-1);
     private int Rows
     {
         get
@@ -252,6 +252,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
     private void ChangeCategory(int delta){
         if(controllerSaveIncomplete){notice=controllerSaveMessage;return;}
         if(quickStep<6)CancelQuickSetup();controllerTesting=false;
+        bindings?.DisarmMenuNavigation();
         tab=Wrap(tab+Math.Sign(delta),Tabs.Length);
         if(tab==3&&controllerDevices!=null)bindingColumn=controllerDevices.Controls.Count>0?3:0;
         if(tab==4)wheelFeedback?.RefreshDevices();
@@ -272,16 +273,32 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
         if((int)action<0||(int)action>=10||(int)slot<0||(int)slot>=4)return;
         if(slot==Idas3ControlBindings.Slot.Controller&&(bindings.ExperimentalDraftEnabled?!bindings.CanCaptureExperimental:controllerDevices!=null&&controllerDevices.Controls.Count==0)){notice="No controller active. Connect one or choose a connected device above.";return;}
         if(!IsOpen||!showOptions||(tab!=3&&tab!=4))SelectTab(3);
-        if(tab==4)wheelPage=2;
+        if(tab==4){wheelPage=2;wheelMenuBindings=false;}
         selection=(int)action+BindingFirstSelection;bindingColumn=(int)slot;captureAction=action;captureSlot=slot;notice="";
         bindings.BeginCapture(action,slot,Time.realtimeSinceStartupAsDouble);
     }
+    private int menuBindingChoice = -1;
+    private void OpenMenuBindingChoice(Idas3ControlBindings.MenuActionId action)
+    {
+        if (!bindings.ExperimentalDraftEnabled) { notice = "Choose INPUT: MULTI to edit separate menu assignments."; return; }
+        OpenBindingChoice(Idas3ControlBindings.ActionId.Accelerate, Idas3ControlBindings.Slot.Controller);
+        menuBindingChoice = (int)action;
+    }
     private void OpenBindingChoice(Idas3ControlBindings.ActionId action,Idas3ControlBindings.Slot slot){
         if(bindings==null||BindingInputBlocked)return;
-        captureAction=action;captureSlot=slot;bindingChoiceSelection=0;bindingChoice=true;
+        if (bindings.ExperimentalDraftEnabled && action==Idas3ControlBindings.ActionId.Pause && slot==Idas3ControlBindings.Slot.Controller) {
+            OpenMenuBindingChoice(Idas3ControlBindings.MenuActionId.Pause); return;
+        }
+        menuBindingChoice=-1;captureAction=action;captureSlot=slot;bindingChoiceSelection=0;bindingChoice=true;
     }
     private void ActivateBindingChoice(){
         bindingChoice=false;
+        if (menuBindingChoice >= 0) {
+            var action = (Idas3ControlBindings.MenuActionId)menuBindingChoice;
+            if (bindingChoiceSelection == 0) bindings.BeginMenuCapture(action, Time.realtimeSinceStartupAsDouble);
+            else if (bindingChoiceSelection == 1) bindings.ClearMenuAssignment(action);
+            return;
+        }
         if(bindingChoiceSelection==0)BeginBindingCapture(captureAction,captureSlot);
         else if(bindingChoiceSelection==1){
             bool cleared=bindings.ClearDraft(captureAction,captureSlot);
@@ -291,6 +308,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
     public void SelectBindingColumn(int column){
         if(!IsOpen||BindingInputBlocked||column<0||column>3)return;
         if(!showOptions||(tab!=3&&tab!=4))SelectTab(3);
+        if (tab==4) wheelMenuBindings=false;
         bindingColumn=column;if(selection<BindingFirstSelection||selection>Rows)selection=BindingFirstSelection;
     }
     public void ChangeControllerDevice(int direction){
@@ -298,7 +316,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
         if(bindings?.ExperimentalDraftEnabled==true){notice="Multi-input uses per-action devices. Change input mode in WHEEL.";return;}
         var choices=controllerDevices.Choices;if(choices.Count==0)return;
         int at=0;for(int i=0;i<choices.Count;++i)if(choices[i].key==controllerDevices.SelectedKey){at=i;break;}
-        if(!controllerSaveIncomplete)CancelQuickSetup();selection=BindingFirstSelection-1;
+        if(!controllerSaveIncomplete)CancelQuickSetup();selection=tab==4?2:BindingFirstSelection-1;
         if(!controllerDevices.Select(choices[Wrap(at+Math.Sign(direction),choices.Count)].key,false))notice=controllerDevices.LastError??"Could not select that controller.";
     }
     private void KeepDisplay(){if(options.ConfirmDisplay())notice="OPTIONS SAVED";else notice=options.LastError??"Display change reverted.";}
@@ -646,7 +664,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
         Text(new Rect(288,deviceControls?524:514,702,18),"Fixed menu controls: arrows / D-pad, Enter / A, Esc / B. F1 always opens online.",small);
     }
     private void BindingChoiceView(){
-        ModalFrame(Idas3ControlBindings.ActionName(captureAction).ToUpperInvariant(),"Choose REBIND to assign a control, CLEAR to remove this slot, or BACK.\nRebinding waits up to 15 seconds. Leave controls at rest to cancel without assigning anything.");
+        ModalFrame(menuBindingChoice>=0?Idas3ControlBindings.MenuActionNames[menuBindingChoice]:Idas3ControlBindings.ActionName(captureAction).ToUpperInvariant(),"Choose REBIND to assign a control, CLEAR to remove this slot, or BACK.\nRebinding waits up to 15 seconds. Leave controls at rest to cancel without assigning anything.");
         string[] choices={"REBIND","CLEAR","BACK"};
         for(int i=0;i<3;++i)if(Button(new Rect(247+i*184,404,174,48),choices[i],bindingChoiceSelection==i)){bindingChoiceSelection=i;ActivateBindingChoice();}
     }
@@ -654,9 +672,9 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
         bool controller=captureSlot==Idas3ControlBindings.Slot.Controller;
         string slot=controller?(bindings.ExperimentalDraftEnabled?"CONTROLLER / ALL CONNECTED DEVICES":"CONTROLLER  /  "+(controllerDevices?.ActiveName??bindings.ActiveControllerProfileLabel)):"KEYBOARD "+((int)captureSlot+1)+"  /  shared across devices";
         string prompt=!string.IsNullOrEmpty(bindings.CaptureError)?bindings.CaptureError:bindings.CapturePrompt;
-        ModalFrame("REBIND "+Idas3ControlBindings.ActionName(captureAction).ToUpperInvariant(),slot+"\n"+prompt+"\n"+(controller?"Conflicts are rejected. Clear the named action first; unrelated actions are never swapped.":"Esc cancels. Keyboard conflicts must be cleared before reassignment."));
+        ModalFrame("REBIND "+(bindings.MenuCaptureName??Idas3ControlBindings.ActionName(captureAction).ToUpperInvariant()),slot+"\n"+prompt+"\n"+(controller?"Conflicts are rejected. Clear the named action first; unrelated actions are never swapped.":"Esc cancels. Keyboard conflicts must be cleared before reassignment."));
         if(Button(new Rect(247,404,253,48),"CLEAR SLOT")){
-            bool cleared=bindings.ClearDraft(captureAction,captureSlot);bindings.CancelCapture();
+            bool cleared; if (bindings.MenuCaptureName != null) { bindings.ClearCapturedMenuAssignment(); cleared=true; } else cleared=bindings.ClearDraft(captureAction,captureSlot);bindings.CancelCapture();
             notice=cleared?"Binding cleared. Save Changes to save.":bindings.LastError??"Could not clear this binding.";
         }
         if(Button(new Rect(519,404,274,48),"CANCEL",true)){

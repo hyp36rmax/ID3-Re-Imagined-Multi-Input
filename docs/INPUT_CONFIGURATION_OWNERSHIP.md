@@ -11,7 +11,7 @@ Categories are two views of the same editing session, not independent input prov
 | Capture, conflicts, calibration, evaluation | `Idas3ControlBindings`, shared by both categories | One capture state and one evaluator; no temporary mapper |
 | Existing controller draft/profiles | `draft` / `draftProfiles`, alongside `current` / `savedProfiles` | Explicit editing in Existing controls changes that selected profile only when Save Changes is chosen |
 | Original keyboard and controller settings | `controls.json`, existing schema, versions 1–3 still readable | Original keyboard slots are shared across modes. Explicit keyboard changes save here. Controller profiles are not replaced by multi-input assignments |
-| New wheel/multi-device assignments | `experimental-input.json`, version 1 | Separate ten-action assignments and enabled mode. New Wheel Setup uses this store even when starting in Existing controls |
+| New wheel/multi-device assignments | `experimental-input.json`, version 2 (reads version 1) | Separate ten driving actions, eight menu actions, menu activation and enabled mode. New Wheel Setup uses this store even when starting in Existing controls |
 | Device selection | `Idas3ControllerDevices`, `controller-device.json` | Nonpersistent preview until Save; Cancel/Discard restores the saved selection. Multi-input references per-action endpoints and does not use this selection to aggregate input |
 | FFB | `Idas3GameOptions.Current` / `Draft`, existing options file | Four shared fields: enable, strength, inversion, output device. Save scopes these fields and retains unrelated drafts. Unchanged FFB now does not rewrite the options file |
 
@@ -19,7 +19,7 @@ Both categories share the existing draft and the separate multi-input draft; swi
 
 ## Non-destructive setup and deliberate edits
 
-Before this review, Quick Setup in Existing controls modified the original controller draft. Saving that setup could replace the player's original assignments. **New Wheel Setup now selects separate multi-input assignments after taking a checkpoint.** It works with a supported single controller as well as multiple input devices and does not filter for FFB. No second schema or mapper is needed: the existing version-1 experimental file already provides the isolation boundary.
+Before this review, Quick Setup in Existing controls modified the original controller draft. Saving that setup could replace the player's original assignments. **New Wheel Setup now selects separate multi-input assignments after taking a checkpoint.** It works with a supported single controller as well as multiple input devices and does not filter for FFB. The experimental file provides the isolation boundary without duplicating the mapper. The navigation follow-up extends that file to version 2 while retaining version-1 loading.
 
 Cancel Setup restores the prior draft and mode. Leaving unfinished Setup also restores that checkpoint. Completing Setup and choosing Save Changes persists its assignments to the separate file; the original controller profiles remain intact. INPUT: EXISTING followed by Save Changes returns to those original mappings, subject to the existing release/reconnect guard. This sample disables force output whenever the multi-input mode is saved or being previewed; New Wheel Setup therefore does not provide FFB yet.
 
@@ -53,7 +53,7 @@ dotnet run --project Tests/ControllerFoundation/ControllerFoundation.csproj --pr
 
 Local results: 34 diagnostic, 46 UAT, 57 Controller, 101 snapshot/provider, 52 multi-input and 9 packaging checks passed, plus the access audit and portable native JSON test. The 14 additional ownership checks execute production binding/provider/save code: new setup cancellation, byte-for-byte original bindings/device preservation through combined saving, two original profiles, return-to-existing evaluation, and exclusion of the held original pad from simultaneous multi-input evaluation. Controller checks additionally prove unchanged FFB avoids persistence/platform calls and retains unrelated drafts. Unity menu checks cover navigation and both Save/Discard entry points but have not run here. C# syntax parsing and actionlint are separate static checks, not a Unity semantic build.
 
-### Actual Actions status, checked 2026-09-27
+### Historical Actions status at ownership review, checked 2026-09-27
 
 [Run 36341394023 for 2a32bfd](https://github.com/hyp36rmax/ID3-Re-Imagined-Multi-Input/actions/runs/36341394023) completed with failure:
 
@@ -67,3 +67,7 @@ The earlier d7a51f0 run also failed overall. No workflow was dispatched or rerun
 Windows prerequisites remain Unity **6000.6.0f1**, Windows Mono support, valid activation, MSVC/Windows SDK, CMake, Python and a full game asset/Steamworks checkout. The Mac has no Unity or rendered player and its checkout is sparse. See [Windows handoff](WINDOWS_SAMPLE_BUILD.md) for exact approved-source build commands. Use an already activated owner Windows machine, or review/configure the documented eligible hosted activation route; no new licensing arrangement is assumed. Unity import/compilation, real JsonUtility checks, rendered UI, complete packaging and all physical hardware acceptance remain unverified.
 
 Stop at local review. After approval, publish normally, inspect the exact-commit Windows/Unity results, and only then perform the bounded baseline/restart and CONTROLS/WHEEL acceptance. Persistent enrollment and expanded hardware campaigns remain separate work.
+
+## Navigation follow-up
+
+[Navigation ownership and upstream decisions](WHEEL_MENU_NAVIGATION.md) supersede the version-1/menu-derived behavior: menu assignments now persist explicitly in version 2. Per-control reconnect guards and stable generic selection were selectively adapted from .38; its aggregation was not imported. At published ad3a18f, Windows native compilation/tests now pass; Unity activation remains missing and no runnable player exists. The original file-preservation contract is unchanged.

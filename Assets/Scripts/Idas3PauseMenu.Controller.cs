@@ -21,6 +21,8 @@ public sealed partial class Idas3PauseMenu
         Idas3ControlBindings.ActionId.ShiftDown
     };
     private int wheelPage = 1, quickStep;
+    private bool wheelMenuBindings;
+    private Vector2 menuTestScroll;
     private bool controllerTesting, overviewSaved, overviewDevices, testFocused, testSuppressed;
     private Vector2 controllerDeviceScroll, selectedNameScroll, activeNameScroll, outputNameScroll, controllerNoticeScroll, assignmentScroll, setupReviewScroll;
     private bool controllerSaveIncomplete;
@@ -30,7 +32,7 @@ public sealed partial class Idas3PauseMenu
     private Idas3ControlBindings.DraftCheckpoint quickCheckpoint;
     internal bool TestingControls => IsOpen && showOptions && tab == 4 && wheelPage == 3 && controllerTesting;
     internal int ControllerPage => wheelPage;
-    private int WheelPageRows => wheelPage == 2 ? 12 : wheelPage == 0 || wheelPage == 4 ? 6 : wheelPage == 1 ? 4 : 3;
+    private int WheelPageRows => wheelPage == 2 ? (wheelMenuBindings ? 12 : 13) : wheelPage == 0 ? 9 : wheelPage == 4 ? 6 : wheelPage == 1 ? 4 : 3;
 
     internal void SetControllerTestSample(Idas3Native.FrameInput frame, bool[] buttons, bool focused, bool suppressed)
     {
@@ -49,6 +51,7 @@ public sealed partial class Idas3PauseMenu
         if (!controllerSaveIncomplete && quickStep < 6)
             CancelQuickSetup();
         controllerTesting = false;
+        bindings?.DisarmMenuNavigation();
         wheelPage = Wrap(page, 5);
         wheelEditing = false;
         selection = 1;
@@ -83,6 +86,19 @@ public sealed partial class Idas3PauseMenu
 
         if (wheelPage == 2 && selection <= Rows)
         {
+            if (selection == 3)
+            {
+                wheelMenuBindings = !wheelMenuBindings;
+                return;
+            }
+
+            if (wheelMenuBindings)
+            {
+                if (selection == 12)
+                    bindings.SetMenuActivation(bindings.MenuActivationPoint + Math.Sign(delta) * .05f);
+                return;
+            }
+
             bindingColumn = Wrap(bindingColumn + Math.Sign(delta), 4);
             return;
         }
@@ -138,7 +154,27 @@ public sealed partial class Idas3PauseMenu
 
         if (wheelPage == 2)
         {
-            OpenBindingChoice((Idas3ControlBindings.ActionId)(selection - 3), (Idas3ControlBindings.Slot)bindingColumn);
+            if (selection == 3)
+            {
+                wheelMenuBindings = !wheelMenuBindings;
+                return;
+            }
+
+            if (wheelMenuBindings)
+            {
+                if (!bindings.ExperimentalDraftEnabled)
+                {
+                    notice = "Choose INPUT: MULTI to edit separate navigation assignments.";
+                    return;
+                }
+
+                if (selection == 12)
+                    bindings.SetMenuActivation(bindings.MenuActivationPoint >= .95f ? .45f : bindings.MenuActivationPoint + .05f);
+                else
+                    OpenMenuBindingChoice((Idas3ControlBindings.MenuActionId)(selection - 4));
+            }
+            else
+                OpenBindingChoice((Idas3ControlBindings.ActionId)(selection - 4), (Idas3ControlBindings.Slot)bindingColumn);
             return;
         }
 
@@ -160,6 +196,39 @@ public sealed partial class Idas3PauseMenu
         if (wheelPage == 4)
         {
             AdjustWheel(selection - 3, 1);
+            return;
+        }
+
+        if (selection >= 7)
+        {
+            if (quickCheckpoint != null && quickStep < 6)
+            {
+                notice = "Finish driving Setup before choosing navigation.";
+                return;
+            }
+
+            if (selection == 9)
+            {
+                notice = "Current menu assignments kept; no driving assignments were copied.";
+                return;
+            }
+
+            if (quickCheckpoint == null)
+            {
+                quickCheckpoint = bindings.BeginWheelSetup();
+                quickStep = 6;
+            }
+
+            bool arcadeProposal = selection == 8;
+            if (arcadeProposal && !bindings.ProposeArcadeNavigation())
+            {
+                notice = bindings.LastError;
+                return;
+            }
+
+            wheelMenuBindings = true;
+            SelectControllerPage(2);
+            notice = arcadeProposal ? "Review proposed menu assignments before Save Changes." : "Choose each Menu action and Rebind a POV direction or button.";
             return;
         }
 
@@ -339,9 +408,12 @@ public sealed partial class Idas3PauseMenu
         for (int i = 2; i < 6; ++i)
             review += "\n" + Idas3ControlBindings.ActionName(SetupActions[i]) + ": " + bindings.BindingName(SetupActions[i], Idas3ControlBindings.Slot.Controller);
         float reviewHeight = Math.Max(140, wrapped.CalcHeight(new GUIContent(review), 677) + 8);
-        setupReviewScroll = GUI.BeginScrollView(new Rect(280, 355, 712, 142), setupReviewScroll, new Rect(0, 0, 690, reviewHeight));
+        setupReviewScroll = GUI.BeginScrollView(new Rect(280, 355, 712, 104), setupReviewScroll, new Rect(0, 0, 690, reviewHeight));
         Text(new Rect(6, 0, 677, reviewHeight), review, wrapped);
         GUI.EndScrollView();
+        ControllerButton(new Rect(280, 466, 225, 29), "POV / BUTTONS", 7, quickCheckpoint == null || quickStep >= 6);
+        ControllerButton(new Rect(512, 466, 232, 29), "ARCADE NAVIGATION", 8, quickCheckpoint == null || quickStep >= 6);
+        ControllerButton(new Rect(751, 466, 239, 29), "KEEP CURRENT NAV", 9, quickCheckpoint == null || quickStep >= 6);
         ControllerButton(new Rect(730, 501, 260, 29), "CANCEL SETUP", 6, quickCheckpoint != null);
     }
 
@@ -405,6 +477,26 @@ public sealed partial class Idas3PauseMenu
 
     private void DrawWheelBindings()
     {
+        ControllerButton(new Rect(280, 278, 710, 28), wheelMenuBindings ? "MENU — SWITCH TO DRIVING" : "DRIVING — SWITCH TO MENU", 3);
+        if (wheelMenuBindings)
+        {
+            for (int i = 0; i < Idas3ControlBindings.MenuActionCount; ++i)
+            {
+                var action = (Idas3ControlBindings.MenuActionId)i;
+                float y = 313 + i * 22;
+                Text(new Rect(285, y + 2, 205, 21), Idas3ControlBindings.MenuActionNames[i], small);
+                if (Button(new Rect(491, y, 494, 21), bindings.MenuBindingName(action), selection == i + 4, true, false, bindingButton))
+                {
+                    selection = i + 4;
+                    OpenMenuBindingChoice(action);
+                }
+            }
+
+            ControllerButton(new Rect(280, 497, 710, 30), "MENU AXIS ACTIVATION POINT: " + Mathf.RoundToInt(bindings.MenuActivationPoint * 100) + "%  (‹ / ›)", 12);
+            Text(new Rect(285, 527, 700, 16), "Release below 40%. Repeat off. Development values; verify on your rig.", small);
+            return;
+        }
+
         string[] columns =
         {
             "KEYBOARD 1",
@@ -413,19 +505,19 @@ public sealed partial class Idas3PauseMenu
             "CONTROLLER"
         };
         for (int col = 0; col < 4; ++col)
-            if (Button(new Rect(col == 3 ? 804 : 462 + col * 114, 278, col == 3 ? 180 : 110, 24), columns[col], bindingColumn == col, true, false, bindingButton))
+            if (Button(new Rect(col == 3 ? 804 : 462 + col * 114, 309, col == 3 ? 180 : 110, 22), columns[col], bindingColumn == col, true, false, bindingButton))
                 SelectBindingColumn(col);
         for (int row = 0; row < 10; ++row)
         {
             var action = (Idas3ControlBindings.ActionId)row;
-            float y = 306 + row * 22;
-            Text(new Rect(285, y + 2, 171, 22), Idas3ControlBindings.ActionName(action), small);
+            float y = 335 + row * 20;
+            Text(new Rect(285, y + 2, 171, 20), Idas3ControlBindings.ActionName(action), small);
             for (int col = 0; col < 4; ++col)
             {
                 var slot = (Idas3ControlBindings.Slot)col;
-                if (Button(new Rect(col == 3 ? 804 : 462 + col * 114, y, col == 3 ? 180 : 110, 21), bindings.BindingName(action, slot), selection == row + 3 && bindingColumn == col, true, false, bindingButton))
+                if (Button(new Rect(col == 3 ? 804 : 462 + col * 114, y, col == 3 ? 180 : 110, 19), bindings.BindingName(action, slot), selection == row + 4 && bindingColumn == col, true, false, bindingButton))
                 {
-                    selection = row + 3;
+                    selection = row + 4;
                     bindingColumn = col;
                     OpenBindingChoice(action, slot);
                 }
@@ -451,10 +543,28 @@ public sealed partial class Idas3PauseMenu
 
             Text(new Rect(285, 326, 700, 28), "Steering " + steer.ToString("0.000") + "   Accelerator " + (TestKey(controllerTestFrame, 87) ? 1 : controllerTestFrame.rightTrigger / 255f).ToString("0.000") + "   Brake " + (TestKey(controllerTestFrame, 83) ? 1 : controllerTestFrame.leftTrigger / 255f).ToString("0.000"), label);
             for (int i = 0; i < 10; ++i)
-                Text(new Rect(286 + (i % 2) * 350, 368 + (i / 2) * 25, 342, 25), Idas3ControlBindings.ActionName((Idas3ControlBindings.ActionId)i) + ": " + (controllerTestButtons[i] ? "ON" : "OFF"), small);
+                Text(new Rect(286 + (i % 2) * 350, 356 + (i / 2) * 18, 342, 25), Idas3ControlBindings.ActionName((Idas3ControlBindings.ActionId)i) + ": " + (controllerTestButtons[i] ? "ON" : "OFF"), small);
         }
 
-        Text(new Rect(285, 505, 700, 32), "Evaluated assigned input before native response processing. ESC or the page buttons stop testing.", wrapped);
+        if (controllerTesting)
+        {
+            string monitor = "Last event: " + bindings.LastMenuEvent + " | Menu activation " + Mathf.RoundToInt(bindings.MenuActivationPoint * 100) + "% / re-arm below 40%; no repeat.\n";
+            for (int i = 0; i < Idas3ControlBindings.MenuActionCount; ++i)
+            {
+                float amount = bindings.MenuAmount(i);
+                string region = amount < Idas3ControlBindings.MenuReleasePoint ? "re-arm region" :
+                    amount >= bindings.MenuActivationPoint ? "activation region" : "between thresholds";
+                string state = bindings.MenuAvailable(i) ? Mathf.RoundToInt(amount * 100) + "% " + region + " / " +
+                    (bindings.MenuArmed(i) ? "armed" : "release to arm") : "unavailable — connect / reassign";
+                monitor += Idas3ControlBindings.MenuActionNames[i] + ": " + state +
+                    (bindings.MenuEvent((Idas3ControlBindings.MenuActionId)i) ? " — EVENT" : "") + "\n";
+            }
+            menuTestScroll = GUI.BeginScrollView(new Rect(280, 453, 712, 57), menuTestScroll, new Rect(0, 0, 686, 180));
+            Text(new Rect(0, 0, 686, 180), monitor, small);
+            GUI.EndScrollView();
+        }
+
+        Text(new Rect(285, 514, 700, 22), "Evaluated input before native response. Menu events test only; Escape exits.", small);
     }
 
     private void DrawWheelFeedback()

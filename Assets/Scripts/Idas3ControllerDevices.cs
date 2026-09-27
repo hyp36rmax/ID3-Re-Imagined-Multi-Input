@@ -199,7 +199,8 @@ public sealed partial class Idas3ControllerDevices : IDisposable
                 for(int i=0;i<device.controls.Count;++i){device.controls[i].value=0;device.validity[i]=error is NotSupportedException?Idas3SampleValidity.Unsupported:Idas3SampleValidity.Unavailable;}
                 continue;
             }
-            if (ObserveActivity(device)) activity = device;
+            // Keep an active generic source stable when another rig component moves (.38 behavior).
+            if (ObserveActivity(device) && !(device.generic && active != null && active.generic && active.choice.connected)) activity = device;
         }
         if (preference.key == "keyboard") SetActive(null);
         else if (Specific)

@@ -26,8 +26,10 @@ public sealed partial class Idas3ControlBindings
     [Serializable]
     internal sealed class ExperimentalValues
     {
-        public int version = 1;
+        public int version = 2;
         public bool enabled;
+        public ExperimentalAssignment[] menuActions = EmptyMenuAssignments();
+        public float menuActivation = .75f;
         public ExperimentalAssignment[] actions = new ExperimentalAssignment[10];
         public ExperimentalValues()
         {
@@ -39,10 +41,13 @@ public sealed partial class Idas3ControlBindings
         {
             var v = new ExperimentalValues
             {
-                enabled = enabled
+                enabled = enabled,
+                menuActivation = menuActivation
             };
             for (int i = 0; i < 10; ++i)
                 v.actions[i] = actions[i].Clone();
+            for (int i = 0; i < MenuActionCount; ++i)
+                v.menuActions[i] = menuActions[i].Clone();
             return v;
         }
     }
@@ -86,7 +91,7 @@ public sealed partial class Idas3ControlBindings
                 if (new FileInfo(experimentalFile).Length > 65536)
                     throw new InvalidDataException("Experimental input file is too large.");
                 var loadedValues = UnityEngine.JsonUtility.FromJson<ExperimentalValues>(File.ReadAllText(experimentalFile));
-                if (loadedValues == null || loadedValues.version != 1 || loadedValues.actions == null || loadedValues.actions.Length != 10)
+                if (loadedValues == null || (loadedValues.version != 1 && loadedValues.version != 2) || loadedValues.actions == null || loadedValues.actions.Length != 10)
                     throw new InvalidDataException("Unsupported experimental input settings.");
                 foreach (var assignment in loadedValues.actions)
                 {
@@ -95,6 +100,22 @@ public sealed partial class Idas3ControlBindings
                     assignment.assigned = false;
                     assignment.runtimePath = null;
                     assignment.waitingRelease = true;
+                }
+
+                if (loadedValues.version == 1)
+                {
+                    loadedValues.menuActions = EmptyMenuAssignments();
+                    loadedValues.menuActivation = .75f;
+                }
+
+                if (loadedValues.menuActions == null || loadedValues.menuActions.Length != MenuActionCount || !Finite(loadedValues.menuActivation) || loadedValues.menuActivation < .45f || loadedValues.menuActivation > .95f)
+                    throw new InvalidDataException("Invalid menu navigation settings.");
+                foreach (var assignment in loadedValues.menuActions)
+                {
+                    if (assignment == null || assignment.binding == null || !ValidExperimentalBinding(assignment.binding))
+                        throw new InvalidDataException("Invalid menu assignment.");
+                    assignment.assigned = false;
+                    assignment.runtimePath = null;
                 }
 
                 experimentalCurrent = loadedValues;
@@ -113,6 +134,7 @@ public sealed partial class Idas3ControlBindings
     {
         experimentalDraft = experimentalCurrent.Clone();
         experimentalDirty = false;
+        ResetMenuNavigation();
     }
 
     // A new wheel setup forks assignment ownership, not the binding engine.
@@ -128,6 +150,7 @@ public sealed partial class Idas3ControlBindings
     {
         CancelCapture();
         experimentalDraft.enabled = enabled;
+        ResetMenuNavigation();
         experimentalDirty = true;
         foreach (var a in experimentalDraft.actions)
             a.waitingRelease = true;
@@ -144,7 +167,12 @@ public sealed partial class Idas3ControlBindings
             foreach (var assignment in experimentalDraft.actions)
                 if (!ValidExperimentalBinding(assignment.binding))
                     throw new InvalidDataException("Invalid experimental calibration.");
+            foreach (var assignment in experimentalDraft.menuActions)
+                if (!ValidExperimentalBinding(assignment.binding))
+                    throw new InvalidDataException("Invalid menu calibration.");
             byte[] data = new UTF8Encoding(false).GetBytes(UnityEngine.JsonUtility.ToJson(experimentalDraft, true));
+            if (data.Length > 65536)
+                throw new InvalidDataException("Experimental settings are too large.");
             using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None))
             {
                 stream.Write(data, 0, data.Length);
@@ -159,6 +187,7 @@ public sealed partial class Idas3ControlBindings
             foreach (var assignment in experimentalDraft.actions)
                 assignment.waitingRelease = true;
             experimentalCurrent = experimentalDraft.Clone();
+            ResetMenuNavigation();
             experimentalDirty = false;
             ExperimentalError = null;
             if (returning)
@@ -368,7 +397,11 @@ public sealed partial class Idas3ControlBindings
 
     private string ExperimentalBindingName(ActionId action, bool useDraft)
     {
-        var a = (useDraft ? experimentalDraft : experimentalCurrent).actions[(int)action];
+        return ExperimentalAssignmentName((useDraft ? experimentalDraft : experimentalCurrent).actions[(int)action]);
+    }
+
+    private string ExperimentalAssignmentName(ExperimentalAssignment a)
+    {
         if (string.IsNullOrEmpty(a.binding.controlPath))
             return "Unassigned";
         bool sameConnection = a.assigned && experimentalFrame != null && experimentalFrame.TryGetEndpoint(a.endpoint, out var endpoint) && endpoint.ConnectionGeneration == a.generation && (endpoint.Status == Idas3EndpointStatus.Ready || endpoint.Status == Idas3EndpointStatus.PartialSample || endpoint.Status == Idas3EndpointStatus.ReadError);

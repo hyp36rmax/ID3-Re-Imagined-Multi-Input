@@ -3,6 +3,8 @@
 <ItemGroup>
 <Compile Include="../../Assets/Scripts/Idas3DeviceSnapshot.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControlBindings.MultiInput.cs" />
+<Compile Include="../../Assets/Scripts/Idas3ControlBindings.Menu.cs" />
+<Compile Include="../../Assets/Scripts/Idas3ControlBindings.Reconnect.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControlBindings.cs" Link="Idas3ControlBindings.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControllerControl.cs" Link="Idas3ControllerControl.cs" />
 <Compile Include="../../Assets/Scripts/Idas3GameOptions.cs" Link="Idas3GameOptions.cs" />
