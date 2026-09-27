@@ -52,6 +52,16 @@ Quick Setup guides steering/pedals and optional shifting, retains a checkpoint f
 
 The change stays on ID3-Multi-device-input in a separate local commit after the earlier unpushed log-only commit. Next is code review, publication approval, a full-game Windows build and the documented Controller menu acceptance checks. The isolated identity-probe build cannot validate these production menu files. Simultaneous multi-device input, production physical-identity resolution and FFB tuning remain pending.
 
+## 2026-09-27 — Controller usability follow-up (separate local review)
+
+The five Controller pages now share Save Changes for bindings, selected input device and existing FFB settings. Unrelated option drafts stay pending. Saving stops at the first failure, reports earlier successful writes and retains the remaining edits for retry or explicit Discard Changes. An incomplete save prevents accidental exit. Setup's checkpoint retires when bindings reach disk, so a later failure cannot restore an older draft over saved bindings. This uses the existing persistence services, with no format or force-calculation change.
+
+Quick Setup presents Steering as one stage with sequential left/right captures and grouped review. Test Controls labels its values as evaluated assigned input before native response processing. Full driver names remain unchanged and are scrollable/wrapped in the menu. Fanatec model, accessories, mode and compatibility require owner-rig evidence; those cases remain pending.
+
+50 portable checks passed, including combined save, failures at each step, retry, cancellation, Setup checkpoint restoration and unrelated-option preservation. The device writer is simulated in the portable coordinator checks; Unity integration checks were extended for all five save actions and the partial-save exit/discard flow but could not run here. C# syntax parsing passed for 107 files. Unity semantic compilation, Windows player build, actual JsonUtility, rendered layout and hardware acceptance remain unperformed. There is no new CI run or player package. Reports of digital-feeling input, limited multi-USB support and excessive FFB concern the original game; this follow-up does not establish fixes for those reports.
+
+The reviewed implementation remains intact. This follow-up is a separate local commit with no push. Next is review, then an approved full-game build on a configured Windows machine with licensed Unity 6000.6.0f1 and the documented acceptance checks. Multi-device aggregation, physical identity resolution and force tuning remain pending.
+
 ## Future evidence entry format
 
 Append a dated entry with milestone/build, purpose, setup, procedure/run ID, capture verdict, identity verdict, expected versus actual behavior, evidence package location, findings, limitations and the next decision. Retain failed or inconclusive attempts. Never infer a hardware success from a synthetic test or a capture-only PASS.

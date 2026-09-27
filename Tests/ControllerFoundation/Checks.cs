@@ -69,6 +69,32 @@ static class Checks {
             var optionsReload=new Idas3GameOptions(new Platform());optionsReload.Initialize(Path.Combine(root,"options"));Check(optionsReload.Current.wheelFeedbackStrength==.61f,"FFB compatible reload");
             platform.fail=true;options.Draft.wheelFeedbackStrength=.19f;Check(!options.ApplyWheelSettings(),"FFB failure reported");
             Check(options.Current.wheelFeedbackStrength==.61f&&options.Draft.wheelFeedbackStrength==.19f&&options.Draft.musicVolume==.23f,"FFB failure restores current and retains draft");
+            // Exercise the shared save coordinator with real binding/options persistence.
+            var combined=new B();combined.Initialize(Path.Combine(root,"combined"));combined.BeginEdit();Check(combined.ApplyDraft(),"combined fixture");
+            platform.fail=false;options.Draft.wheelFeedbackStrength=.37f;
+            combined.ClearDraft(B.ActionId.Camera,B.Slot.Primary);
+            var setupCheckpoint=combined.SaveDraftCheckpoint();combined.ClearDraft(B.ActionId.Brake,B.Slot.Controller);
+            int deviceWrites=0,feedbackWrites=0;bool deviceFailure=false;string selected="preview",savedSelected="original";
+            Func<Idas3ControllerSave.Result> save=()=>Idas3ControllerSave.Save(combined.ApplyDraft,()=>combined.LastError,
+                ()=>{++deviceWrites;if(deviceFailure)return false;savedSelected=selected;return true;},()=>"synthetic device write failure",
+                ()=>{++feedbackWrites;return options.ApplyWheelSettings();},()=>options.LastError);
+            File.Delete(combined.FilePath);Directory.CreateDirectory(combined.FilePath);
+            var result=save();
+            Check(!result.Complete&&!result.BindingsSaved&&deviceWrites==0&&feedbackWrites==0,"binding IO failure stops remaining writes");
+            Check(combined.HasUnsavedChanges&&options.Draft.wheelFeedbackStrength==.37f&&selected=="preview","binding failure keeps all pending drafts");
+            combined.RestoreDraftCheckpoint(setupCheckpoint);
+            Check(B.Equivalent(combined.Draft,setupCheckpoint.values),"failed binding save allows Setup checkpoint cancellation");
+            Directory.Delete(combined.FilePath);combined.ClearDraft(B.ActionId.Brake,B.Slot.Controller);deviceFailure=true;
+            result=save();Check(!result.Complete&&result.BindingsSaved&&feedbackWrites==0&&savedSelected=="original","device failure reports partial binding persistence and skips FFB");
+            Check(!combined.HasUnsavedChanges&&selected=="preview"&&options.Draft.wheelFeedbackStrength==.37f,"device failure retains selection and FFB draft");
+            deviceFailure=false;platform.fail=true;result=save();
+            Check(!result.Complete&&result.BindingsSaved&&savedSelected=="preview"&&result.Message.Contains("Bindings and device saved"),"FFB failure accurately reports earlier saves");
+            Check(options.Draft.wheelFeedbackStrength==.37f&&options.Current.wheelFeedbackStrength==.61f&&options.Draft.musicVolume==.23f&&options.Draft.width==1920,"partial FFB failure retains unrelated and failed drafts");
+            platform.fail=false;result=save();Check(result.Complete&&options.Current.wheelFeedbackStrength==.37f,"retry completes combined save");
+            Check(options.Draft.musicVolume==.23f&&options.Draft.width==1920&&options.Current.musicVolume!=.23f&&options.Current.width==1280,"combined save preserves unrelated option drafts");
+            combined.ClearDraft(B.ActionId.Brake,B.Slot.Primary);options.Draft.wheelFeedbackStrength=.99f;
+            combined.CancelEdit(false);Idas3GameOptions.CopyWheelSettings(options.Current,options.Draft);
+            Check(!combined.HasUnsavedChanges&&options.Draft.wheelFeedbackStrength==.37f&&options.Draft.musicVolume==.23f,"discard restores last saved Controller state and preserves unrelated options");
             Console.WriteLine("PASS "+checks+" portable controller binding checks; Unity UI/native response not executed.");
         }finally{if(Directory.Exists(root))Directory.Delete(root,true);}
     }

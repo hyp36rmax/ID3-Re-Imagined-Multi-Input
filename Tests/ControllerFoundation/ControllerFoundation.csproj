@@ -4,6 +4,7 @@
 <Compile Include="../../Assets/Scripts/Idas3ControlBindings.cs" Link="Idas3ControlBindings.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControllerControl.cs" Link="Idas3ControllerControl.cs" />
 <Compile Include="../../Assets/Scripts/Idas3GameOptions.cs" Link="Idas3GameOptions.cs" />
+<Compile Include="../../Assets/Scripts/Idas3ControllerSave.cs" Link="Idas3ControllerSave.cs" />
 <Compile Include="PlatformStubs.cs" /><Compile Include="Checks.cs" />
 </ItemGroup>
 </Project>

@@ -8,7 +8,9 @@ public sealed partial class Idas3PauseMenu
         Idas3ControlBindings.ActionId.Accelerate,Idas3ControlBindings.ActionId.Brake,Idas3ControlBindings.ActionId.ShiftUp,Idas3ControlBindings.ActionId.ShiftDown};
     private int controllerPage=1,quickStep;
     private bool controllerTesting,overviewSaved,overviewDevices,testFocused,testSuppressed;
-    private Vector2 controllerDeviceScroll;
+    private Vector2 controllerDeviceScroll,selectedNameScroll,activeNameScroll,outputNameScroll,controllerNoticeScroll;
+    private bool controllerSaveIncomplete;
+    private string controllerSaveMessage;
     private Idas3Native.FrameInput controllerTestFrame;
     private readonly bool[] controllerTestButtons=new bool[10];
     private Idas3ControlBindings.DraftCheckpoint quickCheckpoint;
@@ -21,7 +23,7 @@ public sealed partial class Idas3PauseMenu
     }
     internal void SelectControllerPage(int page){
         if(bindings!=null&&bindings.IsCapturing)return;
-        CancelQuickSetup();controllerTesting=false;controllerPage=Wrap(page,5);wheelEditing=false;selection=1;notice="";
+        if(!controllerSaveIncomplete&&quickStep<6)CancelQuickSetup();controllerTesting=false;controllerPage=Wrap(page,5);wheelEditing=false;selection=1;notice="";
         if(controllerPage==4)wheelFeedback?.RefreshDevices();
     }
     private void CancelQuickSetup(){
@@ -53,21 +55,24 @@ public sealed partial class Idas3PauseMenu
         }else if(selection==4&&quickCheckpoint!=null&&quickStep<SetupActions.Length){
             var b=bindings.Draft.actions[(int)SetupActions[quickStep]];
             if(quickStep<4&&b.pad==Idas3ControlBindings.PadInput.None&&string.IsNullOrEmpty(b.controlPath)){notice="Bind this required action before continuing.";return;}
-            ++quickStep;notice=quickStep==6?"Review the six assignments below, then APPLY. Cancel restores your prior draft.":"Accepted in draft. Release controls before capturing the next action.";
+            ++quickStep;notice=quickStep==6?"Review the assignments below, then Save Changes. Cancel restores your prior draft.":"Accepted in draft. Release controls before capturing the next action.";
         }else if(selection==5&&quickCheckpoint!=null&&quickStep>=4&&quickStep<6){++quickStep;notice="Existing shift assignment kept.";}
         else if(selection==6){CancelQuickSetup();notice="Quick Setup cancelled; previous draft restored.";}
     }
     private void ControllerApply(){
-        if(bindings==null)return;
+        if(bindings==null||options==null||controllerDevices==null){notice="Controller services unavailable; nothing saved.";return;}
         if(quickCheckpoint!=null&&quickStep<6){notice="Finish and review Quick Setup before saving, or cancel it.";return;}
-        if(controllerPage==4){notice=options.ApplyWheelSettings()?"FORCE FEEDBACK SETTINGS SAVED":options.LastError;return;}
-        if(!bindings.ApplyDraft()){notice=bindings.LastError;return;}
-        quickCheckpoint=null;
-        if(controllerDevices!=null&&!controllerDevices.ApplySelectionEdit()){notice="Bindings saved; device selection could not be saved: "+controllerDevices.LastError;return;}
-        notice="CONTROLLER AND KEYBOARD BINDINGS SAVED";
+        if(options.DisplayConfirmationPending){notice="Confirm or revert the pending display change before saving Controller settings.";return;}
+        var result=Idas3ControllerSave.Save(bindings.ApplyDraft,()=>bindings.LastError,
+            controllerDevices.ApplySelectionEdit,()=>controllerDevices.LastError,
+            options.ApplyWheelSettings,()=>options.LastError);
+        // Never restore a pre-Setup checkpoint over bindings that have reached disk.
+        if(result.BindingsSaved)quickCheckpoint=null;
+        controllerSaveIncomplete=!result.Complete;controllerSaveMessage=result.Message;notice=result.Message;
     }
+
     private void ControllerDiscard(){
-        CancelQuickSetup();controllerTesting=false;controllerDevices?.CancelSelectionEdit();controllerDevices?.BeginSelectionEdit();
+        controllerSaveIncomplete=false;controllerSaveMessage=null;CancelQuickSetup();controllerTesting=false;controllerDevices?.CancelSelectionEdit();controllerDevices?.BeginSelectionEdit();
         bindings?.CancelEdit(false);Idas3GameOptions.CopyWheelSettings(options.Current,options.Draft);notice="Controller draft discarded. Saved configuration restored.";
     }
     private void AdjustWheel(int row,int direction){
@@ -85,16 +90,18 @@ public sealed partial class Idas3PauseMenu
         string active=controllerDevices?.ActiveName??bindings?.ActiveControllerProfileLabel??"No controller";
         string selected=active;
         if(controllerDevices!=null)foreach(var choice in controllerDevices.Choices)if(choice.key==controllerDevices.SelectedKey)selected=choice.label;
-        ControllerButton(new Rect(278,221,712,29),"DEVICE: "+selected+"  •  CHANGE",2,controllerDevices!=null&&controllerDevices.Choices.Count>0);
-        Text(new Rect(285,254,700,21),controllerDevices!=null&&controllerDevices.UsingFallback?"Active fallback: "+active+". Preferred device unavailable; keyboard stays available.":"Active: "+active+". Single controller; keyboard remains available. APPLY saves.",small);
+        ScrollControllerName(new Rect(278,217,555,31),"Selected: "+selected,ref selectedNameScroll);
+        ControllerButton(new Rect(841,219,149,29),"CHANGE DEVICE",2,controllerDevices!=null&&controllerDevices.Choices.Count>0);
+        ScrollControllerName(new Rect(278,250,712,30),(controllerDevices!=null&&controllerDevices.UsingFallback?"Active fallback: ":"Active: ")+active,ref activeNameScroll);
         if(bindings==null){Text(new Rect(285,293,695,40),"Binding service failed to initialize. Controller setup cannot run.",wrapped);return;}
         if(controllerPage==0){
-            string prompt=quickCheckpoint==null?"Start guided setup for this controller.":quickStep<6?(quickStep+1)+" / 6 — "+Idas3ControlBindings.ActionName(SetupActions[quickStep])+". Capture, then accept.":"REVIEW — these assignments will be saved only with APPLY.";
+            string prompt=quickCheckpoint==null?"Start guided setup for this controller.":quickStep<6?(quickStep<2?"1 / 5 — Steering: "+(quickStep==0?"turn left":"turn right"):(quickStep)+" / 5 — "+Idas3ControlBindings.ActionName(SetupActions[quickStep]))+". Capture, then accept.":"REVIEW — check assignments, then Save Changes.";
             Text(new Rect(285,282,700,30),prompt,label);
             ControllerButton(new Rect(280,318,225,32),quickCheckpoint==null?"START SETUP":"CAPTURE AGAIN",3,quickCheckpoint==null||quickStep<6);
             ControllerButton(new Rect(512,318,232,32),"ACCEPT / NEXT",4,quickCheckpoint!=null&&quickStep<6);
             ControllerButton(new Rect(751,318,239,32),"KEEP OPTIONAL SHIFT",5,quickCheckpoint!=null&&quickStep>=4&&quickStep<6);
-            for(int i=0;i<6;++i)Text(new Rect(286,359+i*23,700,23),Idas3ControlBindings.ActionName(SetupActions[i])+": "+bindings.BindingName(SetupActions[i],Idas3ControlBindings.Slot.Controller),small);
+            Text(new Rect(286,357,700,42),"Steering — Left: "+bindings.BindingName(SetupActions[0],Idas3ControlBindings.Slot.Controller)+"\nRight: "+bindings.BindingName(SetupActions[1],Idas3ControlBindings.Slot.Controller),wrapped);
+            for(int i=2;i<6;++i)Text(new Rect(286,404+(i-2)*23,700,23),Idas3ControlBindings.ActionName(SetupActions[i])+": "+bindings.BindingName(SetupActions[i],Idas3ControlBindings.Slot.Controller),small);
             ControllerButton(new Rect(730,501,260,29),"CANCEL SETUP",6,quickCheckpoint!=null);
         }else if(controllerPage==1){
             ControllerButton(new Rect(280,280,455,28),overviewSaved?"SAVED — SWITCH TO DRAFT":"DRAFT — SWITCH TO SAVED",3);
@@ -103,8 +110,11 @@ public sealed partial class Idas3PauseMenu
                 var choices=controllerDevices?.Choices;
                 Text(new Rect(285,314,695,22),"Keyboard mappings stay available in Bind Controls (three slots per action).",small);
                 int count=choices?.Count??0;
-                controllerDeviceScroll=GUI.BeginScrollView(new Rect(280,344,712,183),controllerDeviceScroll,new Rect(0,0,687,Math.Max(183,count*30)));
-                for(int i=0;i<count;++i)Text(new Rect(8,i*30,675,28),choices[i].label+" — "+(choices[i].connected?"available":"disconnected")+(choices[i].key==controllerDevices.SelectedKey?" / selected":""),small);
+                var names=new string[count];var heights=new float[count];float total=0;
+                for(int i=0;i<count;++i){names[i]=choices[i].label+" — "+(choices[i].connected?"available":"disconnected")+(choices[i].key==controllerDevices.SelectedKey?" / selected":"");
+                    heights[i]=Math.Max(30,wrapped.CalcHeight(new GUIContent(names[i]),665)+8);total+=heights[i];}
+                controllerDeviceScroll=GUI.BeginScrollView(new Rect(280,344,712,183),controllerDeviceScroll,new Rect(0,0,687,Math.Max(183,total)));
+                float nameY=0;for(int i=0;i<count;++i){Text(new Rect(8,nameY,665,heights[i]),names[i],wrapped);nameY+=heights[i];}
                 GUI.EndScrollView();
             }else for(int i=0;i<10;++i){var action=(Idas3ControlBindings.ActionId)i;float y=310+i*22;
                 Text(new Rect(285,y,156,22),Idas3ControlBindings.ActionName(action),small);
@@ -135,22 +145,32 @@ public sealed partial class Idas3PauseMenu
                 Text(new Rect(285,326,700,28),"Steering "+steer.ToString("0.000")+"   Accelerator "+(TestKey(controllerTestFrame,87)?1:controllerTestFrame.rightTrigger/255f).ToString("0.000")+"   Brake "+(TestKey(controllerTestFrame,83)?1:controllerTestFrame.leftTrigger/255f).ToString("0.000"),label);
                 for(int i=0;i<10;++i)Text(new Rect(286+(i%2)*350,368+(i/2)*25,342,25),Idas3ControlBindings.ActionName((Idas3ControlBindings.ActionId)i)+": "+(controllerTestButtons[i]?"ON":"OFF"),small);
             }
-            Text(new Rect(285,505,700,32),"Binding demand before native response/smoothing. ESC or the page buttons stop testing.",wrapped);
+            Text(new Rect(285,505,700,32),"Evaluated assigned input before native response processing. ESC or the page buttons stop testing.",wrapped);
         }else{
             string[] names={"ENABLE", "OUTPUT", "STRENGTH", "INVERT"};var v=options.Draft;
             string[] values={v.wheelForceFeedback?"ON":"OFF",WheelDeviceName(v.wheelFeedbackDevice),Mathf.RoundToInt(v.wheelFeedbackStrength*100)+"%",v.wheelFeedbackInvert?"ON":"OFF"};
             for(int i=0;i<4;++i){float y=284+i*46;Text(new Rect(285,y+5,185,28),names[i],label);
                 if(Button(new Rect(479,y,36,32),"‹",selection==i+3)){selection=i+3;AdjustWheel(i,-1);}
-                ControllerButton(new Rect(521,y,416,32),values[i],i+3);
+                if(i==1)ScrollControllerName(new Rect(521,y,416,32),values[i],ref outputNameScroll);
+                else ControllerButton(new Rect(521,y,416,32),values[i],i+3);
                 if(Button(new Rect(943,y,40,32),"›",selection==i+3)){selection=i+3;AdjustWheel(i,1);}
             }
             Text(new Rect(285,476,700,54),(wheelFeedback?.StatusText??"No output device detected.")+" Settings do not run a motor test; output stays stopped while this menu is open.",wrapped);
         }
         string error=bindings.CaptureError??bindings.LastError;
-        Text(new Rect(274,549,730,29),!string.IsNullOrEmpty(error)?error:!string.IsNullOrEmpty(notice)?notice:"Review assignments before APPLY. Discard keeps the saved configuration.",wrapped);
-        if(Button(new Rect(262,583,177,35),"DISCARD DRAFT",selection==Rows+1))ControllerDiscard();
-        if(Button(new Rect(458,583,254,35),"APPLY",selection==Rows+2,true,true))ControllerApply();
+        string message=controllerSaveIncomplete?controllerSaveMessage:!string.IsNullOrEmpty(error)?error:!string.IsNullOrEmpty(notice)?notice:"Save Changes saves all Controller pages. Discard Changes restores saved Controller settings.";
+        float messageHeight=Math.Max(33,wrapped.CalcHeight(new GUIContent(message),710));
+        controllerNoticeScroll=GUI.BeginScrollView(new Rect(274,544,730,38),controllerNoticeScroll,new Rect(0,0,710,messageHeight));
+        Text(new Rect(0,0,710,messageHeight),message,wrapped);GUI.EndScrollView();
+        if(Button(new Rect(262,583,177,35),"DISCARD CHANGES",selection==Rows+1))ControllerDiscard();
+        if(Button(new Rect(458,583,254,35),"SAVE CHANGES",selection==Rows+2,true,true))ControllerApply();
         if(Button(new Rect(731,583,279,35),"BACK",selection==Rows+3))Back();
+    }
+    // Preserve the complete driver name; horizontal scrolling handles arbitrary lengths.
+    private void ScrollControllerName(Rect rect,string name,ref Vector2 scroll){
+        float width=Math.Max(rect.width-18,small.CalcSize(new GUIContent(name)).x+8);
+        scroll=GUI.BeginScrollView(rect,scroll,new Rect(0,0,width,17));
+        Text(new Rect(0,0,width,17),name,small);GUI.EndScrollView();
     }
     private static bool TestKey(Idas3Native.FrameInput f,int key){uint word=key<32?f.key0:key<64?f.key1:key<96?f.key2:f.key3;return(word&(1u<<(key&31)))!=0;}
 }
