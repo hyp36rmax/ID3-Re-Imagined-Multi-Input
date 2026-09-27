@@ -39,10 +39,15 @@ try {
             Copy-Item (Join-Path $root "Verification/$check/unity-checks.txt") (Join-Path $out "$check.txt")
         }
         $player = Join-Path $root 'Builds/MultiInputSample'
+        foreach ($entry in $native.plugins.PSObject.Properties) {
+            $packaged = Join-Path $player "InitialDUnity_Data/Plugins/x86_64/$($entry.Name)"
+            if ((Get-FileHash $packaged -Algorithm SHA256).Hash -ne $entry.Value) { throw 'Packaged native DLL differs from the exact-source build.' }
+        }
+        $result.nativeSourceCommit=$native.sourceCommit; $result.nativePlugins=$native.plugins
         $readme = Join-Path $player 'READ ME.txt'
         [IO.File]::WriteAllText($readme,"SOURCE COMMIT: $commit`nUnity 6000.6.0f1 / Input System 1.19.0 / Windows x64 Mono`n`n"+[IO.File]::ReadAllText($readme))
         # Use the existing privacy/ROM allowlist and full-player CRC verification unchanged.
-        & python Tools/Build-ReleasePackage.py --player $player --archive (Join-Path $out "ID3-MultiInput-$commit.zip")
+        & python Tools/CI/Package-Game.py $player (Join-Path $out "ID3-MultiInput-$commit.zip")
         if ($LASTEXITCODE -ne 0) { throw 'Complete game package validation failed.' }
     }
     $result.status='PASS'; $result.package="complete $Kind Windows package produced; runtime/hardware acceptance pending"

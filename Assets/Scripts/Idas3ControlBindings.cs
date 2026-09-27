@@ -409,6 +409,7 @@ public sealed partial class Idas3ControlBindings
 
     internal void ApplyMenu(ref Idas3Native.FrameInput frame, bool genericDevice, bool preserveHeldEdges=false){
         if(ExperimentalEnabled){using(var scope=new ExperimentalScope(this)){
+            frame.padConnected=experimentalControls.Count>0?1u:0u;
             frame.padButtons=frame.leftTrigger=frame.rightTrigger=0;frame.thumbLX=frame.thumbLY=frame.thumbRX=frame.thumbRY=0;
             ApplyMenuCore(ref frame,true,preserveHeldEdges,experimentalCurrentEvaluation);
         }}else ApplyMenuCore(ref frame,genericDevice,preserveHeldEdges,current);

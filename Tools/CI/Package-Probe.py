@@ -4,7 +4,7 @@ import hashlib,json,stat,sys,zipfile
 
 def build(player,archive):
     player,archive=Path(player),Path(archive)
-    required={'Id3IdentityProbe.exe','UnityPlayer.dll','Id3IdentityProbe_Data/globalgamemanagers',
+    required={'MonoBleedingEdge/EmbedRuntime/mono-2.0-bdwgc.dll','Id3IdentityProbe.exe','UnityPlayer.dll','Id3IdentityProbe_Data/globalgamemanagers',
               'Id3IdentityProbe_Data/Managed/Assembly-CSharp.dll','Id3IdentityProbe_Data/Plugins/x86_64/Id3IdentityInventory.dll',
               'README.md','docs/UAT.md','build-self-test.json'}
     top={'Id3IdentityProbe.exe','UnityPlayer.dll','UnityCrashHandler64.exe','dstorage.dll','dstoragecore.dll','README.md','build-self-test.json'}
