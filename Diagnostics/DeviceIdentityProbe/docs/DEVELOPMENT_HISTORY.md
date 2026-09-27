@@ -30,6 +30,18 @@ Initial D keeps the existing campaign root and adds `UAT/M1-A-P1/<unique-run-id>
 
 Next decision: review this bounded local change, then authorize its publication and run the isolated Windows build. If that succeeds, collect only baseline and restart evidence first. Review those results before reconnect/duplicate-device/XInput/multiple-FFB testing or any production identity, bindings, aggregation, UI or force-feedback work.
 
+## 2026-09-27 — UAT publication verified; Windows readiness still blocked
+
+The publication check found `112711edfc775464b87b79d36db781931c67e177` already on the live `origin/ID3-Multi-device-input` branch. Local HEAD and the tracking ref matched, and the working tree was clean. Its parent is the previously published probe commit. No additional push or history rewrite was needed. This differs from the earlier report that the UAT commit was local-only; the current live remote is the evidence for its publication. Main and the default branch remain unchanged at `377e4ad9451a34ed4bc0acf735038372d8dec876`.
+
+We checked readiness again. The accessible host is still macOS 26.6.2 on ARM64. Configured project inventory returned no remote projects, no SSH host configuration was present, and the inspected applications/commands provided no Windows VM environment. The repository still has no GitHub Actions workflow. No new evidence establishes an accessible Windows build machine or rig. Windows Unity installation/license status remains unknown, not a diagnosed license failure.
+
+The missing prerequisite is access to a Windows x64 environment with Git/PowerShell, MSVC C++ x64 tools and Windows SDK, CMake 3.24+, and licensed Unity 6000.6.0f1 with Windows Mono support. The isolated project resolves Input System 1.19.0. The shortest next step is to use an existing configured owner machine at the published UAT SHA and run `Diagnostics/DeviceIdentityProbe/Build-Probe.ps1`, retaining its console transcript and Unity build log.
+
+No Windows native/player compilation, serialization self-test, packaged-documentation verification, UAT UI/folder/restart/export check, CI run, player artifact or hardware result was produced. The earlier 46 UAT and 34 identity checks remain portable local results; they were not rerun for this documentation-only update. After a successful Windows build, verify the UAT controls and complete package, then perform only baseline/restart if the rig is accessible. Return evidence before expanding the campaign.
+
+The agreed later player-facing direction remains one Controller menu containing Quick Setup, Overview, Bind Controls, Test Controls and Force Feedback, preserving existing configurations and keeping normal setup simple. This publication/readiness task implements none of that menu or any production input/FFB work. This outcome record is a separate local commit for review and is not included in the already published UAT commit.
+
 ## Future evidence entry format
 
 Append a dated entry with milestone/build, purpose, setup, procedure/run ID, capture verdict, identity verdict, expected versus actual behavior, evidence package location, findings, limitations and the next decision. Retain failed or inconclusive attempts. Never infer a hardware success from a synthetic test or a capture-only PASS.
