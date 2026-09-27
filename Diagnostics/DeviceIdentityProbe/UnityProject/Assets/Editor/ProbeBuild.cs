@@ -36,6 +36,11 @@ public static class ProbeBuild
         var check = new Record { endpoints = new[] { new Endpoint { fields = new[] { Field.Present("serial", "synthetic", "build-self-test") } } } };
         if (JsonUtility.FromJson<Record>(JsonUtility.ToJson(check)).endpoints[0].fields[0].value != "synthetic")
             throw new InvalidOperationException("JsonUtility round-trip failed.");
+        var uatCheck = new UatManifest { runId = "synthetic", sessions = new[] { new UatSession { id = "synthetic-session" } },
+            results = new[] { new UatResult { step = 1, capture = "PASS", identity = "UNRESOLVED" } } };
+        var uatRoundTrip = JsonUtility.FromJson<UatManifest>(JsonUtility.ToJson(uatCheck));
+        if (uatRoundTrip.sessions[0].id != "synthetic-session" || uatRoundTrip.results[0].identity != "UNRESOLVED")
+            throw new InvalidOperationException("UAT JsonUtility round-trip failed.");
         var report = BuildPipeline.BuildPlayer(new BuildPlayerOptions { scenes = new[] { "Assets/Probe.unity" }, locationPathName = output,
             target = BuildTarget.StandaloneWindows64, options = BuildOptions.None });
         if (report.summary.result != BuildResult.Succeeded) throw new InvalidOperationException("Probe build failed: " + report.summary.result);

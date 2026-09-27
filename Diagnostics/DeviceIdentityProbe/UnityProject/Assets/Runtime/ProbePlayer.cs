@@ -19,17 +19,20 @@ namespace Id3.IdentityProbe
         [Serializable] public sealed class BuildIdentity { public string identity = "unidentified", expectedUnity = "6000.6.0f1", expectedInput = "1.19.0"; }
         [DllImport("Id3IdentityInventory", CallingConvention = CallingConvention.Cdecl)]
         static extern int ProbeCapture(out IntPtr data, out int length);
-        static readonly string[] Steps = { "baseline", "restart", "same-port", "different-port", "reversed-order", "unrelated-controller", "identical-devices", "xinput-slots", "multiple-ffb", "custom-observation" };
-        static readonly string[] Verdicts = { "observation", "pass", "unresolved", "fail", "untested" };
-        readonly Generations generations = new Generations();
+        static readonly string[] Steps = { "baseline", "restart" };
+                readonly Generations generations = new Generations();
         readonly Dictionary<string, float> observedValues = new Dictionary<string, float>();
+        UatRun uat;
+        string campaignName, setupNote = "", actual = "", shareObservation = "", uiMessage = "";
+        bool reviewedNotes;
+        int captureVerdict, identityVerdict = 3;
         Pseudonyms pseudo;
         BuildIdentity build;
         string session, campaign, directory, status = "Starting", label = "", collectionStart, captureStep, captureObservation, capturePrivateObservation;
         StreamWriter log, privateLog;
         Task<string> pending;
         long sequence;
-        int generation, stepIndex, verdictIndex;
+        int generation, stepIndex;
         double nextScan, nextSample;
         bool autoCapture = true, subscribed;
         Endpoint[] lastUnity = Array.Empty<Endpoint>();
@@ -43,7 +46,7 @@ namespace Id3.IdentityProbe
                 var asset = Resources.Load<TextAsset>("probe-build");
                 build = asset == null ? new BuildIdentity() : JsonUtility.FromJson<BuildIdentity>(asset.text);
                 if (Application.unityVersion != build.expectedUnity || InputSystem.version.ToString() != build.expectedInput) throw new InvalidOperationException();
-                string campaignName = Argument("--campaign") ?? "default";
+                campaignName = Argument("--campaign") ?? "default";
                 if (campaignName.Length > 64 || campaignName.Length == 0 || campaignName.Any(c => !char.IsLetterOrDigit(c) && c != '-' && c != '_'))
                     throw new ArgumentException("Invalid campaign name");
                 // Dedicated storage, never Application.persistentDataPath or the game's save root.
@@ -63,7 +66,13 @@ namespace Id3.IdentityProbe
                 privateLog = new StreamWriter(new FileStream(Path.Combine(privateDirectory, "capture.raw.jsonl"), FileMode.CreateNew, FileAccess.Write, FileShare.Read), new UTF8Encoding(false)) { AutoFlush = true };
                 InputSystem.onDeviceChange += DeviceChanged; subscribed = true;
                 Write("session-start", Array.Empty<Endpoint>(), Array.Empty<Candidate>(), Array.Empty<CollectionError>());
-                status = "Recording. Output: " + directory;
+                uat = new UatRun(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "ID3IdentityProbe"),
+                    Argument("--uat-export") ?? Argument("--uat-run"), campaign, build.identity, session, o => JsonUtility.ToJson(o), j => JsonUtility.FromJson<UatManifest>(j), Argument("--uat-export") != null);
+                if (Argument("--uat-export") != null) { StopForUat(); status = "Export-only view. Run evidence unchanged."; return; }
+                setupNote = uat.Manifest.environment;
+                stepIndex = uat.Manifest.sessions.Length > 1 ? 1 : 0;
+                Write("uat-session-attached", Array.Empty<Endpoint>(), Array.Empty<Candidate>(), Array.Empty<CollectionError>());
+                status = "Recording UAT: " + uat.DirectoryPath;
             } catch (Exception e) { Fail(e); }
         }
         static string Argument(string name) {
@@ -195,10 +204,11 @@ namespace Id3.IdentityProbe
                 nativeBuild = nativeBuild, unityVersion = Application.unityVersion, inputSystemVersion = InputSystem.version.ToString(),
                 campaign = campaign, session = session, utc = DateTime.UtcNow.ToString("O"), collectionStartedUtc = kind == "inventory" ? collectionStart : "",
                 kind = kind, step = step ?? Steps[stepIndex], observation = observation ?? pseudo.Token("observation", label), platform = Application.platform.ToString(),
-                testerVerdict = kind == "tester-observation" ? Verdicts[verdictIndex] : "observation",
+                testerVerdict = "observation",
                 eventType = eventType, eventEndpoint = pseudo.EndpointToken(eventEndpoint),
                 endpoints = endpoints.Select(pseudo.Share).ToArray(), candidates = candidates.Select(pseudo.Share).ToArray(), errors = errors };
             log.WriteLine(JsonUtility.ToJson(record));
+            if (uat != null && uat.Active) uat.Record(record);
             if (kind == "tester-observation") File.AppendAllText(Path.Combine(directory, "steps.txt"), record.utc + " " + record.step + " " + record.testerVerdict + " " + record.observation + Environment.NewLine);
             // Full descriptors/control paths are retained only in the separate private capture.
             record.endpoints = endpoints; record.candidates = candidates; record.eventEndpoint = eventEndpoint;
@@ -223,32 +233,78 @@ namespace Id3.IdentityProbe
             // Never leak an exception message/path/raw device value into the shareable log.
             status = "Recording stopped: " + e.GetType().Name;
             try { if (log != null) Write("collection-fatal", Array.Empty<Endpoint>(), Array.Empty<Candidate>(), new[] { new CollectionError { api = "managed-probe", code = e.GetType().Name } }); } catch { }
+            try { uat?.CloseSession(true); } catch { }
             log?.Dispose(); privateLog?.Dispose(); log = privateLog = null;
+        }
+        void UatAction(Action action) {
+            try { action(); uiMessage = "Saved."; }
+            catch (Exception e) { uiMessage = "Action failed: " + e.Message; } // Local UI only; never copied into share output.
+        }
+        void StopForUat() {
+            if (log != null) Write("session-end", Array.Empty<Endpoint>(), Array.Empty<Candidate>(), Array.Empty<CollectionError>());
+            log?.Dispose(); privateLog?.Dispose(); log = privateLog = null; pending = null; autoCapture = false;
+            status = "Capture stopped. Existing evidence preserved.";
+        }
+        string ReviewedField(string previous) {
+            string next = GUILayout.TextField(previous, 4000);
+            if (next != previous) reviewedNotes = false;
+            return next;
         }
         void OnGUI()
         {
             GUILayout.BeginArea(new Rect(20, 20, Screen.width - 40, Screen.height - 40));
-            GUILayout.Label("INITIAL D — DEVICE IDENTITY PROBE (read-only device access)");
-            GUILayout.Label(status);
-            stepIndex = GUILayout.SelectionGrid(stepIndex, Steps, 3);
-            GUILayout.Label("Tester observation: label the physical control you moved (stored as a campaign-stable token).");
-            label = GUILayout.TextField(label, 120);
-            verdictIndex = GUILayout.SelectionGrid(verdictIndex, Verdicts, 5);
-            autoCapture = GUILayout.Toggle(autoCapture, "Capture inventory every two seconds");
-            GUI.enabled = log != null;
-            if (GUILayout.Button("Record observation / capture now")) {
-                try { Write("tester-observation", UnityInventory(), Array.Empty<Candidate>(), Array.Empty<CollectionError>()); Capture(); }
-                catch (Exception e) { Fail(e); }
+            scroll = GUILayout.BeginScrollView(scroll);
+            GUILayout.Label("INITIAL D — READ-ONLY IDENTITY UAT / M1-A-P1");
+            GUILayout.Label(status); GUILayout.Label(uiMessage);
+            if (uat != null) {
+                GUILayout.Label("Run: " + uat.Manifest.runId + " | " + uat.Manifest.state + " | capture: " + uat.Manifest.captureResult + " | identity: " + uat.Manifest.identityResult);
+                GUILayout.Label("UAT results: " + uat.DirectoryPath);
+                GUILayout.Label("Restart command arguments (same executable):");
+                GUILayout.TextField("--campaign " + campaignName + " --uat-run " + uat.Manifest.runId);
+                if (GUILayout.Button("Open results folder")) Application.OpenURL(new Uri(uat.DirectoryPath + Path.DirectorySeparatorChar).AbsoluteUri);
+                GUI.enabled = !uat.Active;
+                if (GUILayout.Button("Export shareable evidence ZIP")) {
+                    try { uiMessage = "Exported: " + uat.Export(); } catch (Exception e) { uiMessage = "Export failed: " + e.GetType().Name; }
+                }
+                GUI.enabled = uat.Active && log != null;
+                GUILayout.Label("Setup for review: hardware models, OS/driver versions, relevant settings; no serials, account names or private paths.");
+                setupNote = ReviewedField(setupNote);
+                GUILayout.Label("Readable notes below are exported verbatim. Review them before saving.");
+                reviewedNotes = GUILayout.Toggle(reviewedNotes, "I reviewed these setup / actual / observation notes for sharing");
+                if (GUILayout.Button("Save reviewed hardware / software / settings")) UatAction(() => uat.EnvironmentNote(setupNote, reviewedNotes));
+                stepIndex = GUILayout.SelectionGrid(stepIndex, new[] { "1. Baseline", "2. Application restart" }, 2);
+                GUILayout.Label(UatRun.Expected[stepIndex]);
+                GUILayout.Label("Move one available control for 3 seconds; wait 4 seconds. No driving or force output.");
+                GUILayout.Label("Private physical-control label (only its pseudonym is shared):");
+                label = GUILayout.TextField(label, 120);
+                if (GUILayout.Button("Record movement observation / capture now")) UatAction(() => {
+                    Write("tester-observation", UnityInventory(), Array.Empty<Candidate>(), Array.Empty<CollectionError>()); Capture();
+                });
+                GUILayout.Label("Capture result (logging worked):");
+                captureVerdict = GUILayout.SelectionGrid(captureVerdict, UatRun.Verdicts, 4);
+                GUILayout.Label("Identity result (evidence supports the stated association; ambiguity stays UNRESOLVED):");
+                identityVerdict = GUILayout.SelectionGrid(identityVerdict, UatRun.Verdicts, 4);
+                GUILayout.Label("Actual behavior — shareable:"); actual = ReviewedField(actual);
+                GUILayout.Label("Tester observation / missing hardware / interpretation — shareable:"); shareObservation = ReviewedField(shareObservation);
+                if (GUILayout.Button("Save step result (retains all earlier attempts)")) UatAction(() => {
+                    uat.Result(stepIndex + 1, UatRun.Verdicts[captureVerdict], UatRun.Verdicts[identityVerdict], actual, shareObservation, reviewedNotes);
+                    reviewedNotes = false;
+                });
+                if (GUILayout.Button("Save for restart / pause run")) UatAction(() => { StopForUat(); uat.CloseSession(); });
+                if (GUILayout.Button("Finish run")) UatAction(() => { uat.Finish(false); StopForUat(); });
+                if (GUILayout.Button("Cancel run — keep partial evidence")) UatAction(() => { uat.Finish(true); StopForUat(); });
+                GUI.enabled = true;
+                GUILayout.Label("Capture PASS is not identity PASS; neither validates production multi-input or FFB. Later stages are pending review.");
             }
-            GUI.enabled = true;
-            scroll = GUILayout.BeginScrollView(scroll); GUILayout.Label(summary); GUILayout.EndScrollView();
-            GUILayout.EndArea();
+            GUILayout.Label(summary);
+            GUILayout.EndScrollView(); GUILayout.EndArea();
         }
         void OnDestroy()
         {
             if (subscribed) InputSystem.onDeviceChange -= DeviceChanged;
             try { if (log != null) Write("session-end", Array.Empty<Endpoint>(), Array.Empty<Candidate>(), Array.Empty<CollectionError>()); } catch { }
             log?.Dispose(); privateLog?.Dispose(); log = privateLog = null;
+            uat?.Dispose();
             // No blocking join: native work only owns metadata handles and releases them in its scope.
         }
     }

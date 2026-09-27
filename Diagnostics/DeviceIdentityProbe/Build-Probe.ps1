@@ -50,6 +50,7 @@ try {
     $unityProcess = Start-Process -FilePath $UnityEditor -ArgumentList $unityArgs -Wait -PassThru
     if ($unityProcess.ExitCode -ne 0 -or -not (Test-Path $env:ID3_PROBE_PLAYER)) { throw 'Unity probe build failed. Inspect build/unity-build.log.' }
     Copy-Item (Join-Path $probeRoot 'README.md') (Join-Path $buildRoot 'player/README.md') -Force
+    Copy-Item (Join-Path $probeRoot 'docs') (Join-Path $buildRoot 'player') -Recurse -Force
     Write-Host "Built isolated probe: $env:ID3_PROBE_PLAYER"
     Write-Host "Build identity: $identity"
 } finally { $env:ID3_PROBE_PLAYER = $oldPlayer }

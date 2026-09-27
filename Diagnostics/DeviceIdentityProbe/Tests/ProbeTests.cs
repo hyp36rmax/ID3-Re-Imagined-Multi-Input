@@ -12,8 +12,9 @@ static class ProbeTests
     static Endpoint E(string id, string backend, string serial = "", string path = "", string vendor = "1", string product = "2") => new Endpoint {
         id = id, backend = backend, fields = new[] { Field.Present("serial", serial, "synthetic"), Field.Present("path", path, "synthetic"),
             Field.Present("vendorId", vendor, "synthetic"), Field.Present("productId", product, "synthetic") } };
-    static void Main()
+    static void Main(string[] args)
     {
+        if (args.Length == 2 && args[0] == "--uat-crash") { UatTests.CrashChild(args[1]); return; }
         var u = E("unity:1", "unity", "SERIAL-PRIVATE"); var h = E("hid:path", "hid", "SERIAL-PRIVATE", "\\\\?\\HID#PRIVATE");
         var c = Associations.Examine(new[] { u, h }, true);
         Check(c.Single().status == "unresolved" && c[0].reason.StartsWith("unique-observed"), "serial hypothesis must not auto-resolve");
@@ -73,6 +74,7 @@ static class ProbeTests
         var original = Associations.Examine(new[] { u, h, d }, true).Select(x => x.left + x.right + x.reason).OrderBy(x => x).ToArray();
         var reversed = Associations.Examine(new[] { d, h, u }, true).Select(x => x.left + x.right + x.reason).OrderBy(x => x).ToArray();
         Check(original.SequenceEqual(reversed), "candidate set independent of enumeration order");
+        UatTests.Run();
         Console.WriteLine("PASS: " + checks + " synthetic diagnostic checks (not Unity/Windows/hardware validation).");
     }
 }

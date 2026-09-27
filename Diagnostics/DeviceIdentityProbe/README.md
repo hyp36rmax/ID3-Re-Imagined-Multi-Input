@@ -19,6 +19,12 @@ The script reuses the repository's vswhere/vcvarsall/NMake approach. It builds o
 
 Build identity is Git HEAD plus SHA-256 of the diagnostic native source, Unity assets/settings/package manifest, and build script. Both native and managed captures include this identity; mismatch is an explicit collection error. It fingerprints source, not toolchain binaries or the installed driver stack.
 
+## Current UAT workflow
+
+Use [the baseline/restart UAT guide](docs/UAT.md) for the current runner, dedicated run folders, reviewed notes, recovery and shareable ZIP export. A fresh launch creates a new run under `%LOCALAPPDATA%\ID3IdentityProbe\UAT\M1-A-P1\<unique-run-id>`. For restart, reuse the displayed `--campaign` and `--uat-run` arguments with the same executable. Existing campaign directories below remain compatible and are never moved. Use **Save for restart**, **Finish**, or **Cancel**, then **Export shareable evidence ZIP**. Later hardware stages remain pending review.
+
+The persistent [developer history](docs/DEVELOPMENT_HISTORY.md) distinguishes source findings, local tests and unperformed Windows/hardware work.
+
 ## Captures and privacy
 
 Output is separate from game saves:
@@ -62,11 +68,11 @@ Native inventories run on one background worker about every two seconds after co
 - Shared containers remain unresolved endpoint groups and never establish a unique actuator. Names, model IDs, enumeration order, location and activity never establish physical identity by themselves.
 - XInput/Unity pairs are possible mirrors with no slot-to-Unity mapping. Tester labels and movement are observations only. No candidate chooses, persists, enrolls or routes a device.
 
-## Windows procedure and criteria, defined before testing
+## Reference hardware matrix — only baseline/restart enabled in current UAT
 
-Use one campaign throughout. For each stage select its step in the player, enter a short physical-control label (for example `wheel-A steering`, `pedals-A brake`, `shifter-A third`), move only that control for at least three seconds, then click **Record observation / capture now**. Wait at least four seconds for inventory completion. Repeat per control. Labels remain plaintext only in private logs. Keep a private hardware/port ledger so similar units can be distinguished by the tester. Do not infer a binding from correlated activity.
+The current UAT supports only rows 1–2 through the linked guide; rows 3–9 are pending and not selectable. The following preserves the original future campaign plan, not permission to run it. After future approval, use one campaign throughout. For each available stage, enter a short physical-control label (for example `wheel-A steering`, `pedals-A brake`, `shifter-A third`), move only that control for at least three seconds, then click **Record observation / capture now**. Wait at least four seconds for inventory completion. Repeat per control. Labels remain plaintext only in private logs. Keep a private hardware/port ledger so similar units can be distinguished by the tester. Do not infer a binding from correlated activity.
 
-Verdicts describe the stage's evidence: **pass** means the specified capture behavior was observed; it does not certify physical identity. **unresolved** means missing/ambiguous evidence prevents the proposed association. **fail** means a probe invariant or expected capture behavior failed. **untested** means hardware or the test environment was unavailable. Record a verdict and explanation with the observation button. Collection errors can make an association unresolved even when logging itself passes.
+The original matrix terms map to the current UAT PASS / UNRESOLVED / FAIL / NOT TESTED. Verdicts describe the stage's evidence: **pass** means the specified capture behavior was observed; it does not certify physical identity. **unresolved** means missing/ambiguous evidence prevents the proposed association. **fail** means a probe invariant or expected capture behavior failed. **untested** means hardware or the test environment was unavailable. Record a verdict and explanation with the observation button. Collection errors can make an association unresolved even when logging itself passes.
 
 | Stage / selector | Exact action | Expected evidence and stage-specific criteria |
 |---|---|---|
@@ -95,4 +101,4 @@ python .\Diagnostics\DeviceIdentityProbe\Tests\audit.py
 
 The C++ `Tests/json_test.cpp` exercises the native JSON helper without Windows. Compile with a C++17 compiler and parse its stdout as JSON. Synthetic tests cover missing/contradictory fields, duplicate candidates, incomplete inventories, endpoint-only aliases, generation tracking, permutation invariance and stable campaign/session pseudonyms. Static audit checks source scope and forbidden device-output calls; it is not a runtime driver guarantee.
 
-At authoring: 34 portable synthetic checks pass; portable C++ JSON output and static audit pass. Windows C++ compilation, PowerShell execution, Unity project import/player build and JsonUtility self-test, real driver behavior and all nine hardware stages remain unperformed. The next gate is a Windows build and baseline capture, followed by owner review of the resulting evidence. Production identity resolution, enrollment/binding migration, input aggregation and steering-linked FFB routing remain outside this milestone.
+The original probe validation passed 34 portable synthetic checks; the UAT suite adds storage, lifecycle and export checks. The original portable C++ JSON output and static audit pass. Windows C++ compilation, PowerShell execution, Unity project import/player build and JsonUtility self-test, real driver behavior and all nine hardware stages remain unperformed. The next gate is a Windows build and baseline capture, followed by owner review of the resulting evidence. Production identity resolution, enrollment/binding migration, input aggregation and steering-linked FFB routing remain outside this milestone.

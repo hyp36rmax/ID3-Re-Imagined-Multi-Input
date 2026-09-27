@@ -9,5 +9,7 @@
   <ItemGroup>
     <Compile Include="../UnityProject/Assets/Core/ProbeModel.cs" Link="ProbeModel.cs" />
     <Compile Include="ProbeTests.cs" />
+    <Compile Include="UatTests.cs" />
+    <Compile Include="../UnityProject/Assets/Core/UatRun.cs" Link="UatRun.cs" />
   </ItemGroup>
 </Project>
