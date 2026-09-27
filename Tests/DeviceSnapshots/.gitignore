@@ -1,0 +1,4 @@
+/bin/
+/obj/
+!DeviceSnapshots.csproj
+BaselineControllerDevices.generated.cs

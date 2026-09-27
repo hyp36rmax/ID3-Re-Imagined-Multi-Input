@@ -13,7 +13,7 @@ foreach(var f in target.GetType().GetFields())if(doc.RootElement.TryGetProperty(
 public static T FromJson<T>(string text)=>JsonSerializer.Deserialize<T>(text,Options);
 }
 }
-public static class Idas3Native {
+public static partial class Idas3Native {
 public struct FrameInput {
 public uint key0,key1,key2,key3,key4,key5,key6,key7,padConnected,padButtons,leftTrigger,rightTrigger;
 public int thumbLX,thumbLY,thumbRX,thumbRY;
@@ -32,7 +32,7 @@ public struct Resolution{public int width,height;}
 public static class Screen{public static int width=1280,height=720;public static FullScreenMode fullScreenMode;public static Resolution[] resolutions=System.Array.Empty<Resolution>();public static void SetResolution(int w,int h,FullScreenMode m){}}
 public static class QualitySettings{public static int antiAliasing;}
 public static class Time{public static double realtimeSinceStartupAsDouble;}
-public static class Mathf{public static float Clamp(float a,float lo,float hi)=>System.Math.Max(lo,System.Math.Min(hi,a));}
+public static class Mathf{public static int RoundToInt(float value)=>(int)System.Math.Round(value);public static float Clamp(float a,float lo,float hi)=>System.Math.Max(lo,System.Math.Min(hi,a));}
 }
 public static class Idas3FramePacing{public static void Configure(bool v,int n){}}
 public static class Idas3ArcadeMeterCatalog{public static bool IsValidStyle(int n)=>n>=0;}

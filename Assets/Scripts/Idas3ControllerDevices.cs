@@ -12,7 +12,7 @@ using UnityEngine.InputSystem.XInput;
 // Device discovery/selection is separate from action bindings and native input
 // response. A selected missing device stays selected; it cannot fall through
 // to a different controller. Only Automatic may change the input source.
-public sealed class Idas3ControllerDevices : IDisposable
+public sealed partial class Idas3ControllerDevices : IDisposable
 {
     public sealed class DeviceChoice
     {
@@ -38,6 +38,14 @@ public sealed class Idas3ControllerDevices : IDisposable
         public readonly List<AxisControl> axes = new List<AxisControl>();
         public float[] activityBaseline;
         public Idas3ControlBindings.PadState pad;
+        public Idas3EndpointToken token;
+        public long connectionGeneration;
+        public bool snapshotConnected, legacyRegistered;
+        public Idas3EndpointStatus sampleStatus=Idas3EndpointStatus.Disconnected;
+        public string sampleDetail="Not observed connected";
+        public Idas3SampleValidity[] validity;
+        public Idas3EndpointIdentity identity;
+        public Idas3EndpointSnapshot snapshot;
     }
     private readonly Func<double> now;
     private readonly Idas3GamepadInput.ReadXInput readXInput;
@@ -85,6 +93,7 @@ public sealed class Idas3ControllerDevices : IDisposable
     {
         if (string.IsNullOrWhiteSpace(saveRoot)) throw new ArgumentException("A controller save directory is required.", nameof(saveRoot));
         Dispose(); devices.Clear(); unityDevices.Clear(); choices.Clear(); active = automaticResume = null;
+        ResetSnapshots();
         file = Path.Combine(Path.GetFullPath(saveRoot), "controller-device.json"); preference = new Preference(); LastError = null;
         if (File.Exists(file))
         {
@@ -99,7 +108,7 @@ public sealed class Idas3ControllerDevices : IDisposable
         {
             var device = new Device { slot = i, profile = "xinput:slot:" + i, model = "xinput" };
             device.choice.key = "xinput:" + i; device.choice.label = "Xbox controller — slot " + (i + 1);
-            AddStandardControls(device); xbox[i] = device; devices.Add(device);
+            AddStandardControls(device); RegisterSnapshotDevice(device); xbox[i] = device; devices.Add(device);
         }
         initialized = true; dirty = restoreSelection = true; nextScan = 0; xinputAvailable = true;
         InputSystem.onDeviceChange += OnDeviceChange;
@@ -108,9 +117,14 @@ public sealed class Idas3ControllerDevices : IDisposable
     public void Dispose()
     {
         if (initialized) InputSystem.onDeviceChange -= OnDeviceChange;
+        if(initialized)StopSnapshots();
         initialized = false; active = automaticResume = null;
     }
-    private void OnDeviceChange(InputDevice device, InputDeviceChange change) { dirty = true; }
+    private void OnDeviceChange(InputDevice device, InputDeviceChange change) {
+        dirty = true;
+        if(change==InputDeviceChange.Removed||change==InputDeviceChange.Disconnected||change==InputDeviceChange.Disabled)
+            InvalidateSnapshotDevice(device,change==InputDeviceChange.Disabled?Idas3EndpointStatus.Disabled:Idas3EndpointStatus.Disconnected);
+    }
     private Preference selectionCheckpoint;
     private Device selectionActive;
     private static Preference CopyPreference(Preference p)=>new Preference{key=p.key,profile=p.profile,label=p.label,model=p.model,generic=p.generic};
@@ -166,9 +180,9 @@ public sealed class Idas3ControllerDevices : IDisposable
         bool rawConnected = false;
         foreach (var device in xbox)
         {
-            if (device.choice.connected || scan)
+            if (device.choice.connected || scan || !xinputAvailable)
             {
-                bool connected = PollXInput(device.slot, out var pad);
+                bool connected = PollXInput(device, out var pad);
                 if (connected != device.choice.connected) { dirty = true; device.firstValues = true; }
                 device.choice.connected = connected; device.pad = pad;
             }
@@ -179,7 +193,12 @@ public sealed class Idas3ControllerDevices : IDisposable
         foreach (var device in devices)
         {
             if (!device.choice.connected) continue;
-            ReadDevice(device);
+            try{ReadDevice(device);}
+            catch(Exception error) when(error is InvalidOperationException||error is NotSupportedException){
+                device.sampleStatus=Idas3EndpointStatus.ReadError;device.sampleDetail="Unity compatibility-pad read unavailable";device.pad=default;
+                for(int i=0;i<device.controls.Count;++i){device.controls[i].value=0;device.validity[i]=error is NotSupportedException?Idas3SampleValidity.Unsupported:Idas3SampleValidity.Unavailable;}
+                continue;
+            }
             if (ObserveActivity(device)) activity = device;
         }
         if (preference.key == "keyboard") SetActive(null);
@@ -212,25 +231,29 @@ public sealed class Idas3ControllerDevices : IDisposable
         if (preference.key == "automatic" && allowAutoSwitch)
             SetActive(activity ?? active ?? FirstConnected());
         if (dirty) { RebuildChoices(); dirty = false; }
+        PublishSnapshots(time,Idas3SnapshotKind.Poll);
     }
     public bool TryRead(out Idas3ControlBindings.PadState state)
     {
         state = active != null && active.choice.connected ? active.pad : default;
         return state.connected;
     }
-    private bool PollXInput(int slot, out Idas3ControlBindings.PadState pad)
+    private bool PollXInput(Device device, out Idas3ControlBindings.PadState pad)
     {
-        pad = default; if (!xinputAvailable) return false;
+        pad = default;
+        if (!xinputAvailable) { device.sampleStatus=Idas3EndpointStatus.BackendUnavailable;device.sampleDetail="Native XInput entrypoint unavailable for this provider session";return false; }
         try
         {
-            if (readXInput((uint)slot, out var raw) != 0) return false;
+            uint result=readXInput((uint)device.slot,out var raw);
+            if(result!=0){device.sampleStatus=result==1167?Idas3EndpointStatus.Disconnected:Idas3EndpointStatus.ReadError;device.sampleDetail="XInputGetState result "+result;return false;}
+            device.sampleStatus=Idas3EndpointStatus.Ready;device.sampleDetail="Native XInput state";
             pad = new Idas3ControlBindings.PadState { connected = true, buttons = raw.gamepad.buttons,
                 leftTrigger = raw.gamepad.leftTrigger, rightTrigger = raw.gamepad.rightTrigger,
                 thumbLX = raw.gamepad.thumbLX, thumbLY = raw.gamepad.thumbLY, thumbRX = raw.gamepad.thumbRX, thumbRY = raw.gamepad.thumbRY };
             return true;
         }
-        catch (DllNotFoundException) { xinputAvailable = false; return false; }
-        catch (EntryPointNotFoundException) { xinputAvailable = false; return false; }
+        catch (DllNotFoundException) { xinputAvailable = false; device.sampleStatus=Idas3EndpointStatus.BackendUnavailable;device.sampleDetail="Native XInput DLL unavailable";return false; }
+        catch (EntryPointNotFoundException) { xinputAvailable = false;device.sampleStatus=Idas3EndpointStatus.BackendUnavailable;device.sampleDetail="Native XInput entrypoint unavailable";return false; }
     }
     private void RefreshUnityDevices(bool rawConnected)
     {
@@ -241,21 +264,36 @@ public sealed class Idas3ControllerDevices : IDisposable
             if (!input.added || !input.enabled || (discoveryFilter != null && !discoveryFilter(input)) || !GamingDevice(input)) continue;
             // Windows Input System mirrors the same XInput ports. The native
             // API is authoritative for these four pads and preserves every bit.
-            if (rawConnected && (input is XInputControllerWindows || string.Equals(input.description.interfaceName, "XInput", StringComparison.OrdinalIgnoreCase))) continue;
-            if (!unityDevices.TryGetValue(input.deviceId, out var device))
+            bool suppressed=rawConnected && (input is XInputControllerWindows || string.Equals(input.description.interfaceName, "XInput", StringComparison.OrdinalIgnoreCase));
+            if (!unityDevices.TryGetValue(input.deviceId, out var device)||!ReferenceEquals(device.unity,input))
             {
-                device = CreateDevice(input);
-                // Some inexpensive HID devices report the same placeholder
-                // serial. Keep simultaneous devices independently selectable.
-                var duplicate = Find(device.choice.key);
-                if (duplicate != null && duplicate.choice.connected && duplicate.unity != null && duplicate.unity.added && duplicate.unity.enabled) device.choice.key += ":device:" + input.deviceId;
-                unityDevices.Add(input.deviceId, device); devices.Add(device);
+                if(device!=null){device.choice.connected=false;device.seen=false;device.pad=default;device.sampleStatus=Idas3EndpointStatus.Disconnected;device.sampleDetail="Unity runtime ID reused by another endpoint";}
+                device = CreateDevice(input);RegisterSnapshotDevice(device);
+                unityDevices[input.deviceId]=device;
+            }
+            if(suppressed){
+                if(device.choice.connected){dirty=true;device.firstValues=true;}
+                device.seen=true;device.choice.connected=false;device.pad=default;
+                device.sampleStatus=Idas3EndpointStatus.SuppressedMirror;device.sampleDetail="Native XInput is authoritative; Unity slot association unresolved";continue;
+            }
+            // A newly seen suppressed mirror must not change legacy enumeration order.
+            if(!device.legacyRegistered){
+                // Apply the legacy duplicate-key rule only when this endpoint becomes
+                // eligible; snapshot-only mirrors must not affect selector keys either.
+                var duplicate=Find(device.choice.key);
+                if(duplicate!=null&&duplicate.choice.connected&&duplicate.unity!=null&&duplicate.unity.added&&duplicate.unity.enabled)
+                    device.choice.key+=":device:"+input.deviceId;
+                devices.Add(device);device.legacyRegistered=true;
             }
             if (!device.choice.connected) { device.firstValues = true; newlyConnected.Add(device); dirty = true; }
             device.seen = device.choice.connected = true;
         }
         foreach (var device in unityDevices.Values)
-            if (!device.seen && device.choice.connected) { device.choice.connected = false; device.pad = default; device.firstValues = true; dirty = true; }
+            if (!device.seen) {
+                if(device.choice.connected){device.choice.connected=false;device.pad=default;device.firstValues=true;dirty=true;}
+                device.sampleStatus=device.unity.added&&!device.unity.enabled?Idas3EndpointStatus.Disabled:Idas3EndpointStatus.Disconnected;
+                device.sampleDetail="Unity endpoint absent or disabled";
+            }
         if (preference.key == "automatic" && automaticResume != null && !automaticResume.choice.connected)
         {
             Device candidate = null; int matches = 0;
@@ -402,8 +440,11 @@ public sealed class Idas3ControllerDevices : IDisposable
     private static short Stick(float value) => (short)Mathf.Clamp(Mathf.RoundToInt(value * (value < 0 ? 32768 : 32767)), -32768, 32767);
     private static void ReadDevice(Device device)
     {
+        device.sampleStatus=device.controls.Count==0?Idas3EndpointStatus.UnsupportedControls:Idas3EndpointStatus.Ready;
+        device.sampleDetail=device.controls.Count==0?"No controls supported by the existing provider":"Existing provider sample";
         if (device.slot >= 0)
         {
+            for(int i=0;i<device.validity.Length;++i)device.validity[i]=Idas3SampleValidity.Valid;
             for (int i = 0; i < ButtonMasks.Length; ++i) device.controls[i].value = (device.pad.buttons & ButtonMasks[i]) != 0 ? 1 : 0;
             device.controls[14].value = device.pad.leftTrigger / 255f; device.controls[15].value = device.pad.rightTrigger / 255f;
             device.controls[16].value = Signed(device.pad.thumbLX); device.controls[17].value = Signed(device.pad.thumbLY);
@@ -412,7 +453,12 @@ public sealed class Idas3ControllerDevices : IDisposable
         }
         for (int i = 0; i < device.controls.Count; ++i)
         {
-            var control = device.controls[i]; float value = device.axes[i].ReadUnprocessedValue();
+            var control = device.controls[i]; float value;
+            try{value=device.axes[i].ReadUnprocessedValue();}
+            catch(NotSupportedException){device.validity[i]=Idas3SampleValidity.Unsupported;device.sampleStatus=Idas3EndpointStatus.PartialSample;device.sampleDetail="Unity control read unsupported";control.value=0;continue;}
+            catch(InvalidOperationException){device.validity[i]=Idas3SampleValidity.Unavailable;device.sampleStatus=Idas3EndpointStatus.PartialSample;device.sampleDetail="A Unity control read was unavailable";control.value=0;continue;}
+            device.validity[i]=float.IsNaN(value)||float.IsInfinity(value)?Idas3SampleValidity.Invalid:Idas3SampleValidity.Valid;
+            if(device.validity[i]!=Idas3SampleValidity.Valid){device.sampleStatus=Idas3EndpointStatus.PartialSample;device.sampleDetail="Non-finite Unity control sample";}
             control.value = float.IsNaN(value) || float.IsInfinity(value) ? 0 : control.button ? value >= .5f ? 1 : 0 : Mathf.Clamp(value, control.minimum, control.maximum);
         }
         if (device.unity is Gamepad gamepad) { device.pad = Idas3GamepadInput.ReadUnityPad(gamepad); return; }
