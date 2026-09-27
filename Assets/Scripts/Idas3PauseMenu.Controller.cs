@@ -8,7 +8,7 @@ public sealed partial class Idas3PauseMenu
         Idas3ControlBindings.ActionId.Accelerate,Idas3ControlBindings.ActionId.Brake,Idas3ControlBindings.ActionId.ShiftUp,Idas3ControlBindings.ActionId.ShiftDown};
     private int controllerPage=1,quickStep;
     private bool controllerTesting,overviewSaved,overviewDevices,testFocused,testSuppressed;
-    private Vector2 controllerDeviceScroll,selectedNameScroll,activeNameScroll,outputNameScroll,controllerNoticeScroll;
+    private Vector2 controllerDeviceScroll,selectedNameScroll,activeNameScroll,outputNameScroll,controllerNoticeScroll,assignmentScroll,setupReviewScroll;
     private bool controllerSaveIncomplete;
     private string controllerSaveMessage;
     private Idas3Native.FrameInput controllerTestFrame;
@@ -32,29 +32,29 @@ public sealed partial class Idas3PauseMenu
     }
     private void ControllerHorizontal(int delta){
         if(selection==1){SelectControllerPage(controllerPage+Math.Sign(delta));return;}
-        if(selection==2){ChangeControllerDevice(Math.Sign(delta));return;}
+        if(selection==2){if(!bindings.ExperimentalDraftEnabled)ChangeControllerDevice(Math.Sign(delta));return;}
         if(controllerPage==2&&selection<=Rows){bindingColumn=Wrap(bindingColumn+Math.Sign(delta),4);return;}
         if(controllerPage==4&&selection<=Rows)AdjustWheel(selection-3,Math.Sign(delta));
     }
     private void ControllerActivate(bool pointer=false){
         if(!pointer&&wheelNavigation&&(selection<=2||controllerPage==4&&selection<=Rows)){wheelEditing=!wheelEditing;return;}
         if(selection==1){SelectControllerPage(controllerPage+1);return;}
-        if(selection==2){ChangeControllerDevice(1);return;}
+        if(selection==2){if(!bindings.ExperimentalDraftEnabled)ChangeControllerDevice(1);return;}
         if(selection==Rows+1){ControllerDiscard();return;}
         if(selection==Rows+2){ControllerApply();return;}
-        if(selection==Rows+3){Back();return;}
+        if(selection==Rows+3){ToggleExperimentalInput();return;}
+        if(selection==Rows+4){Back();return;}
         if(controllerPage==2){OpenBindingChoice((Idas3ControlBindings.ActionId)(selection-3),(Idas3ControlBindings.Slot)bindingColumn);return;}
         if(controllerPage==1){if(selection==3)overviewSaved=!overviewSaved;else overviewDevices=!overviewDevices;return;}
         if(controllerPage==3){controllerTesting=true;return;}
         if(controllerPage==4){AdjustWheel(selection-3,1);return;}
         if(selection==3){
-            if(controllerDevices==null||controllerDevices.Controls.Count==0){notice="Connect and select the controller to set up. Keyboard bindings remain in Bind Controls.";return;}
+            if(bindings.ExperimentalDraftEnabled?!bindings.CanCaptureExperimental:controllerDevices==null||controllerDevices.Controls.Count==0){notice="Connect and select the controller to set up. Keyboard bindings remain in Bind Controls.";return;}
             if(quickCheckpoint==null){quickCheckpoint=bindings.SaveDraftCheckpoint();quickStep=0;}
             if(quickStep<SetupActions.Length){captureAction=SetupActions[quickStep];captureSlot=Idas3ControlBindings.Slot.Controller;
                 bindings.BeginCapture(captureAction,captureSlot,Time.realtimeSinceStartupAsDouble);}
         }else if(selection==4&&quickCheckpoint!=null&&quickStep<SetupActions.Length){
-            var b=bindings.Draft.actions[(int)SetupActions[quickStep]];
-            if(quickStep<4&&b.pad==Idas3ControlBindings.PadInput.None&&string.IsNullOrEmpty(b.controlPath)){notice="Bind this required action before continuing.";return;}
+            if(quickStep<4&&!bindings.HasControllerAssignment(SetupActions[quickStep])){notice="Bind this required action before continuing.";return;}
             ++quickStep;notice=quickStep==6?"Review the assignments below, then Save Changes. Cancel restores your prior draft.":"Accepted in draft. Release controls before capturing the next action.";
         }else if(selection==5&&quickCheckpoint!=null&&quickStep>=4&&quickStep<6){++quickStep;notice="Existing shift assignment kept.";}
         else if(selection==6){CancelQuickSetup();notice="Quick Setup cancelled; previous draft restored.";}
@@ -63,14 +63,18 @@ public sealed partial class Idas3PauseMenu
         if(bindings==null||options==null||controllerDevices==null){notice="Controller services unavailable; nothing saved.";return;}
         if(quickCheckpoint!=null&&quickStep<6){notice="Finish and review Quick Setup before saving, or cancel it.";return;}
         if(options.DisplayConfirmationPending){notice="Confirm or revert the pending display change before saving Controller settings.";return;}
-        var result=Idas3ControllerSave.Save(bindings.ApplyDraft,()=>bindings.LastError,
+        var result=Idas3ControllerSave.Save(()=>!bindings.HasUnsavedChanges||bindings.ApplyDraft(),()=>bindings.LastError,
             controllerDevices.ApplySelectionEdit,()=>controllerDevices.LastError,
-            options.ApplyWheelSettings,()=>options.LastError);
+            options.ApplyWheelSettings,()=>options.LastError,bindings.ApplyExperimentalDraft,()=>bindings.ExperimentalError);
         // Never restore a pre-Setup checkpoint over bindings that have reached disk.
         if(result.BindingsSaved)quickCheckpoint=null;
         controllerSaveIncomplete=!result.Complete;controllerSaveMessage=result.Message;notice=result.Message;
     }
 
+    private void ToggleExperimentalInput(){
+        CancelQuickSetup();controllerTesting=false;bindings.SetExperimentalDraftEnabled(!bindings.ExperimentalDraftEnabled);
+        notice=bindings.ExperimentalDraftEnabled?"Multi-input preview. Set up each action using its own device. FFB disabled; Save Changes to use in game.":"Existing controls preview. Save Changes to return; multi-input preferences are kept.";
+    }
     private void ControllerDiscard(){
         controllerSaveIncomplete=false;controllerSaveMessage=null;CancelQuickSetup();controllerTesting=false;controllerDevices?.CancelSelectionEdit();controllerDevices?.BeginSelectionEdit();
         bindings?.CancelEdit(false);Idas3GameOptions.CopyWheelSettings(options.Current,options.Draft);notice="Controller draft discarded. Saved configuration restored.";
@@ -84,24 +88,26 @@ public sealed partial class Idas3PauseMenu
         selection=row;ControllerActivate(true);return true;
     }
     private void ControllerView(){
-        Fill(new Rect(262,130,748,413),Panel);Text(new Rect(282,142,680,34),"CONTROLLER — SINGLE ACTIVE DEVICE",heading);
+        Fill(new Rect(262,130,748,413),Panel);Text(new Rect(282,142,680,34),(bindings?.ExperimentalDraftEnabled==true?"CONTROLLER — MULTI-INPUT SAMPLE":"CONTROLLER — EXISTING CONTROLS"),heading);
         for(int i=0;i<5;++i)if(Button(new Rect(276+i*144,181,140,32),ControllerPages[i],controllerPage==i,true,false,bindingButton))SelectControllerPage(i);
         if(selection==1)Frame(new Rect(274,179,720,36),Red);
         string active=controllerDevices?.ActiveName??bindings?.ActiveControllerProfileLabel??"No controller";
         string selected=active;
         if(controllerDevices!=null)foreach(var choice in controllerDevices.Choices)if(choice.key==controllerDevices.SelectedKey)selected=choice.label;
-        ScrollControllerName(new Rect(278,217,555,31),"Selected: "+selected,ref selectedNameScroll);
-        ControllerButton(new Rect(841,219,149,29),"CHANGE DEVICE",2,controllerDevices!=null&&controllerDevices.Choices.Count>0);
-        ScrollControllerName(new Rect(278,250,712,30),(controllerDevices!=null&&controllerDevices.UsingFallback?"Active fallback: ":"Active: ")+active,ref activeNameScroll);
+        ScrollControllerName(new Rect(278,217,555,31),bindings?.ExperimentalDraftEnabled==true?"Capture each action from its own device":"Selected: "+selected,ref selectedNameScroll);
+        ControllerButton(new Rect(841,219,149,29),"CHANGE DEVICE",2,controllerDevices!=null&&controllerDevices.Choices.Count>0&&!bindings.ExperimentalDraftEnabled);
+        ScrollControllerName(new Rect(278,250,712,30),bindings?.ExperimentalDraftEnabled==true?"All available devices • keyboard recovery retained":(controllerDevices!=null&&controllerDevices.UsingFallback?"Active fallback: ":"Active: ")+active,ref activeNameScroll);
         if(bindings==null){Text(new Rect(285,293,695,40),"Binding service failed to initialize. Controller setup cannot run.",wrapped);return;}
         if(controllerPage==0){
-            string prompt=quickCheckpoint==null?"Start guided setup for this controller.":quickStep<6?(quickStep<2?"1 / 5 — Steering: "+(quickStep==0?"turn left":"turn right"):(quickStep)+" / 5 — "+Idas3ControlBindings.ActionName(SetupActions[quickStep]))+". Capture, then accept.":"REVIEW — check assignments, then Save Changes.";
+            string prompt=quickCheckpoint==null?(bindings.ExperimentalDraftEnabled?"Start setup; move only the device for each action.":"Start guided setup for this controller."):quickStep<6?(quickStep<2?"1 / 5 — Steering: "+(quickStep==0?"turn left":"turn right"):(quickStep)+" / 5 — "+Idas3ControlBindings.ActionName(SetupActions[quickStep]))+". Capture, then accept.":"REVIEW — check assignments, then Save Changes.";
             Text(new Rect(285,282,700,30),prompt,label);
             ControllerButton(new Rect(280,318,225,32),quickCheckpoint==null?"START SETUP":"CAPTURE AGAIN",3,quickCheckpoint==null||quickStep<6);
             ControllerButton(new Rect(512,318,232,32),"ACCEPT / NEXT",4,quickCheckpoint!=null&&quickStep<6);
             ControllerButton(new Rect(751,318,239,32),"KEEP OPTIONAL SHIFT",5,quickCheckpoint!=null&&quickStep>=4&&quickStep<6);
-            Text(new Rect(286,357,700,42),"Steering — Left: "+bindings.BindingName(SetupActions[0],Idas3ControlBindings.Slot.Controller)+"\nRight: "+bindings.BindingName(SetupActions[1],Idas3ControlBindings.Slot.Controller),wrapped);
-            for(int i=2;i<6;++i)Text(new Rect(286,404+(i-2)*23,700,23),Idas3ControlBindings.ActionName(SetupActions[i])+": "+bindings.BindingName(SetupActions[i],Idas3ControlBindings.Slot.Controller),small);
+            string review="Steering — Left: "+bindings.BindingName(SetupActions[0],Idas3ControlBindings.Slot.Controller)+"\nRight: "+bindings.BindingName(SetupActions[1],Idas3ControlBindings.Slot.Controller);
+            for(int i=2;i<6;++i)review+="\n"+Idas3ControlBindings.ActionName(SetupActions[i])+": "+bindings.BindingName(SetupActions[i],Idas3ControlBindings.Slot.Controller);
+            float reviewHeight=Math.Max(140,wrapped.CalcHeight(new GUIContent(review),677)+8);
+            setupReviewScroll=GUI.BeginScrollView(new Rect(280,355,712,142),setupReviewScroll,new Rect(0,0,690,reviewHeight));Text(new Rect(6,0,677,reviewHeight),review,wrapped);GUI.EndScrollView();
             ControllerButton(new Rect(730,501,260,29),"CANCEL SETUP",6,quickCheckpoint!=null);
         }else if(controllerPage==1){
             ControllerButton(new Rect(280,280,455,28),overviewSaved?"SAVED — SWITCH TO DRAFT":"DRAFT — SWITCH TO SAVED",3);
@@ -116,11 +122,16 @@ public sealed partial class Idas3PauseMenu
                 controllerDeviceScroll=GUI.BeginScrollView(new Rect(280,344,712,183),controllerDeviceScroll,new Rect(0,0,687,Math.Max(183,total)));
                 float nameY=0;for(int i=0;i<count;++i){Text(new Rect(8,nameY,665,heights[i]),names[i],wrapped);nameY+=heights[i];}
                 GUI.EndScrollView();
-            }else for(int i=0;i<10;++i){var action=(Idas3ControlBindings.ActionId)i;float y=310+i*22;
-                Text(new Rect(285,y,156,22),Idas3ControlBindings.ActionName(action),small);
-                Text(new Rect(441,y,240,22),bindings.BindingName(action,Idas3ControlBindings.Slot.Controller,!overviewSaved),small);
-                string keys="";for(int k=0;k<3;++k)keys+=(k>0?" / ":"")+bindings.BindingName(action,(Idas3ControlBindings.Slot)k,!overviewSaved);
-                Text(new Rect(685,y,305,22),keys,small);
+            }else{
+                // Device names and reassignment status must remain readable together.
+                float total=0;var lines=new string[10];var heights=new float[10];
+                for(int i=0;i<10;++i){var action=(Idas3ControlBindings.ActionId)i;
+                    string keys="";for(int k=0;k<3;++k)keys+=(k>0?" / ":"")+bindings.BindingName(action,(Idas3ControlBindings.Slot)k,!overviewSaved);
+                    lines[i]=Idas3ControlBindings.ActionName(action)+": "+bindings.BindingName(action,Idas3ControlBindings.Slot.Controller,!overviewSaved)+"\nKeyboard: "+keys;
+                    heights[i]=Math.Max(46,wrapped.CalcHeight(new GUIContent(lines[i]),675)+8);total+=heights[i];
+                }
+                assignmentScroll=GUI.BeginScrollView(new Rect(280,311,712,222),assignmentScroll,new Rect(0,0,689,total));
+                float y=0;for(int i=0;i<10;++i){Text(new Rect(5,y,675,heights[i]),lines[i],wrapped);y+=heights[i];}GUI.EndScrollView();
             }
         }else if(controllerPage==2){
             string[] columns={"KEYBOARD 1","KEYBOARD 2","KEYBOARD 3","CONTROLLER"};
@@ -155,7 +166,7 @@ public sealed partial class Idas3PauseMenu
                 else ControllerButton(new Rect(521,y,416,32),values[i],i+3);
                 if(Button(new Rect(943,y,40,32),"›",selection==i+3)){selection=i+3;AdjustWheel(i,1);}
             }
-            Text(new Rect(285,476,700,54),(wheelFeedback?.StatusText??"No output device detected.")+" Settings do not run a motor test; output stays stopped while this menu is open.",wrapped);
+            Text(new Rect(285,476,700,54),(bindings.ExperimentalBlocksFeedback?"MULTI-INPUT SAMPLE: force output disabled; ownership not validated.":wheelFeedback?.StatusText??"No output device detected.")+" Settings do not run a motor test; output stays stopped while this menu is open.",wrapped);
         }
         string error=bindings.CaptureError??bindings.LastError;
         string message=controllerSaveIncomplete?controllerSaveMessage:!string.IsNullOrEmpty(error)?error:!string.IsNullOrEmpty(notice)?notice:"Save Changes saves all Controller pages. Discard Changes restores saved Controller settings.";
@@ -163,8 +174,9 @@ public sealed partial class Idas3PauseMenu
         controllerNoticeScroll=GUI.BeginScrollView(new Rect(274,544,730,38),controllerNoticeScroll,new Rect(0,0,710,messageHeight));
         Text(new Rect(0,0,710,messageHeight),message,wrapped);GUI.EndScrollView();
         if(Button(new Rect(262,583,177,35),"DISCARD CHANGES",selection==Rows+1))ControllerDiscard();
-        if(Button(new Rect(458,583,254,35),"SAVE CHANGES",selection==Rows+2,true,true))ControllerApply();
-        if(Button(new Rect(731,583,279,35),"BACK",selection==Rows+3))Back();
+        if(Button(new Rect(447,583,180,35),"SAVE CHANGES",selection==Rows+2,true,true))ControllerApply();
+        if(Button(new Rect(635,583,185,35),bindings.ExperimentalDraftEnabled?"INPUT: MULTI":"INPUT: EXISTING",selection==Rows+3))ToggleExperimentalInput();
+        if(Button(new Rect(828,583,182,35),"BACK",selection==Rows+4))Back();
     }
     // Preserve the complete driver name; horizontal scrolling handles arbitrary lengths.
     private void ScrollControllerName(Rect rect,string name,ref Vector2 scroll){

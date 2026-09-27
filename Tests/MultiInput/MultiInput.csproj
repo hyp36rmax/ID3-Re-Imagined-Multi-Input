@@ -9,7 +9,8 @@
 <Compile Include="../../Assets/Scripts/Idas3ControlBindings.cs" />
 <Compile Include="../../Assets/Scripts/Idas3GamepadInput.cs" />
 <Compile Include="../ControllerFoundation/PlatformStubs.cs" />
-<Compile Include="BaselineControllerDevices.generated.cs" />
-<Compile Include="InputSystemStubs.cs" /><Compile Include="Checks.cs" />
+
+<Compile Include="../DeviceSnapshots/InputSystemStubs.cs" /><Compile Include="Checks.cs" />
+<Compile Include="../../Assets/Scripts/Idas3ControllerSave.cs" />
 </ItemGroup>
 </Project>

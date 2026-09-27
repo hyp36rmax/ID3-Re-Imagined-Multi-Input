@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
 <ItemGroup>
+<Compile Include="../../Assets/Scripts/Idas3DeviceSnapshot.cs" />
+<Compile Include="../../Assets/Scripts/Idas3ControlBindings.MultiInput.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControlBindings.cs" Link="Idas3ControlBindings.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControllerControl.cs" Link="Idas3ControllerControl.cs" />
 <Compile Include="../../Assets/Scripts/Idas3GameOptions.cs" Link="Idas3GameOptions.cs" />

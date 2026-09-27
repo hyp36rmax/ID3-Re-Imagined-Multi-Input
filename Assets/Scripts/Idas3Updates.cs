@@ -25,7 +25,7 @@ public sealed class Idas3Updates : MonoBehaviour
     public string AvailableVersion {get;private set;}
     public string Message {get;private set;}="Check GitHub for the latest Windows release.";
     public string ReleaseUrl {get;private set;}
-    public bool CanCheck=>!Busy&&Time.realtimeSinceStartupAsDouble>=nextCheck;
+    public bool CanCheck=>!Idas3SampleBuild.Active&&!Busy&&Time.realtimeSinceStartupAsDouble>=nextCheck;
     public bool CanActivate=>State==CheckState.Available||State==CheckState.Current&&fullUrl!=null||CanCheck;
     public string ButtonLabel=>Busy?"PLEASE WAIT…":State==CheckState.Available?"INSTALL UPDATE":State==CheckState.Current?"UPDATES / REPAIR":"CHECK FOR UPDATES";
     public bool WindowVisible {get;private set;}
@@ -55,7 +55,7 @@ public sealed class Idas3Updates : MonoBehaviour
     [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.BeforeSceneLoad)]
     private static void Bootstrap(){
         Instance=null;StartupFinished=true;
-        if(Application.isEditor)return;
+        if(Application.isEditor||Idas3SampleBuild.Active)return;
         bool diagnostic=false;
         foreach(string arg in Environment.GetCommandLineArgs())
             if((arg.StartsWith("-idas3-",StringComparison.Ordinal)&&arg!="-idas3-skip-update-once")||arg.StartsWith("-hakone-",StringComparison.Ordinal))diagnostic=true;
@@ -84,6 +84,7 @@ public sealed class Idas3Updates : MonoBehaviour
 
     public void Initialize(bool checkOnStartup=true){
         InstalledVersion=Application.version;
+        if(Idas3SampleBuild.Active){Message="Development sample: release updates disabled. Use the reviewed sample package.";return;}
         if(checkOnStartup){StartupFinished=false;startupWindow=true;ShowWindow();CheckNow();}
     }
     public void Activate(){

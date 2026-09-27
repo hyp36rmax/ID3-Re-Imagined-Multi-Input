@@ -73,7 +73,8 @@ public sealed class Idas3EndpointSnapshot
         Controls=Array.AsReadOnly(ownedControls);
     }
     public bool TryGetControl(string path,out Idas3ControlSample sample){
-        foreach(var control in Controls)if(string.Equals(control.Path,path,StringComparison.Ordinal)){sample=control;return CanRead&&sample.Validity==Idas3SampleValidity.Valid;}
+        // Index immutable collections: avoid allocating an interface enumerator per action/control lookup.
+        for(int i=0;i<Controls.Count;++i){var control=Controls[i];if(string.Equals(control.Path,path,StringComparison.Ordinal)){sample=control;return CanRead&&sample.Validity==Idas3SampleValidity.Valid;}}
         sample=default;return false;
     }
 }
@@ -91,7 +92,7 @@ public sealed class Idas3DeviceFrame
         Endpoints=Array.AsReadOnly(ownedEndpoints);
     }
     public bool TryGetEndpoint(Idas3EndpointToken token,out Idas3EndpointSnapshot endpoint){
-        foreach(var item in Endpoints)if(item.Token.Equals(token)){endpoint=item;return true;}
+        for(int i=0;i<Endpoints.Count;++i){var item=Endpoints[i];if(item.Token.Equals(token)){endpoint=item;return true;}}
         endpoint=null;return false;
     }
 }

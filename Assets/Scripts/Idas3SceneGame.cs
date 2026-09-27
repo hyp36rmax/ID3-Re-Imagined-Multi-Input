@@ -216,7 +216,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             pauseMenu.Updates=Idas3Updates.Instance;
             if(pauseMenu.Updates==null){pauseMenu.Updates=gameObject.AddComponent<Idas3Updates>();pauseMenu.Updates.Initialize(false);}
             replayLibrary=gameObject.AddComponent<Idas3ReplayLibrary>();replayLibrary.Initialize(this,pauseMenu,saves);
-            if(!diagnosticMode)gameObject.AddComponent<Idas3CommunityTimes>().Initialize(this,gameOptions,pauseMenu);
+            if(!diagnosticMode&&!Idas3SampleBuild.Active)gameObject.AddComponent<Idas3CommunityTimes>().Initialize(this,gameOptions,pauseMenu);
             pauseMenu.InitializeBindings(controlBindings);
             controllerDevices.Initialize(saves);
             controllerDevices.ActiveDeviceChanged += ControllerDeviceChanged;
@@ -334,8 +334,9 @@ public sealed class Idas3SceneGame : MonoBehaviour
         try
         {
             gameOptions.Tick(Time.realtimeSinceStartupAsDouble);
-            controllerDevices.Tick(Focused && !pauseMenu.IsOpen && !multiplayerMenu.IsOpen &&
+            controllerDevices.Tick(!controlBindings.ExperimentalInUse && Focused && !pauseMenu.IsOpen && !multiplayerMenu.IsOpen &&
                 !raceMusicMenu.IsOpen && !controlBindings.IsCapturing && !controlBindings.SuppressInput);
+            if(!controlBindings.ExperimentalInUse&&controlBindings.ActiveControllerProfileKey!=controllerDevices.ActiveProfileKey)ControllerDeviceChanged();
             pauseMenu.FrameRate = Time.unscaledDeltaTime > 0 ? 1f / Time.unscaledDeltaTime : 0;
             pauseMenu.SetContext(OnlineRace, CanOpenPause && !OnlineRace, Idas3CourseCatalog.SceneName(Status), (Status.flags & 8192u) != 0);
             pauseMenu.FullTuneAvailable=pauseMenu.IsOpen&&!multiplayer.InLobby&&!multiplayer.Busy&&!multiplayer.ChallengerPending&&Idas3Native.Idas3SceneCanFullTune()==1;
@@ -393,7 +394,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             // An unfocused synthetic neutral sample is not a physical release.
             // Keep capture's release latch until focused hardware is neutral.
             else controlBindings.Poll(physicalKey, physicalPad, Time.realtimeSinceStartupAsDouble,
-                diagnosticPad ? null : controllerDevices.Controls);
+                diagnosticPad ? null : controllerDevices.Controls,controllerDevices.Snapshot);
             if(pauseMenu.TestingControls){
                 for(int action=0;action<10;++action)controllerTestActions[action]=controlBindings.DraftActionHeld((Idas3ControlBindings.ActionId)action);
                 pauseMenu.SetControllerTestSample(controlBindings.EvaluateDraftDriving(),controllerTestActions,Focused,controlBindings.SuppressInput);
@@ -588,7 +589,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     private void UpdateWheelFeedback()
     {
         if(wheelFeedback==null)return;
-        bool allowed=ready&&!stopping&&Application.isFocused&&!pauseMenu.BlocksGameInput&&
+        bool allowed=!controlBindings.ExperimentalBlocksFeedback&&ready&&!stopping&&Application.isFocused&&!pauseMenu.BlocksGameInput&&
             !multiplayerMenu.BlocksGameInput&&!raceMusicMenu.BlocksGameInput&&!controlBindings.SuppressInput;
         var state=new Idas3Native.WheelState{size=40};
         if(allowed&&gameOptions.Current.wheelForceFeedback&&Idas3Native.Idas3SceneGetWheelState(ref state)!=1)allowed=false;
@@ -602,7 +603,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     private void ControllerDeviceChanged()
     {
         wheelFeedback?.Stop();
-        if (controlBindings == null) return;
+        if (controlBindings == null||controlBindings.ExperimentalInUse) return;
         controlBindings.SelectControllerProfile(controllerDevices.ActiveProfileKey,
             controllerDevices.ActiveName, controllerDevices.ActiveIsGeneric);
         controlBindings.ControllerDeviceChanged();

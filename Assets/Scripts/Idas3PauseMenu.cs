@@ -80,6 +80,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
         controllerDevices.ActiveDeviceChanged+=ControllerDeviceChanged;
     }
     private void ControllerDeviceChanged(){
+        if(bindings?.ExperimentalInUse==true)return;
         if(!controllerSaveIncomplete)CancelQuickSetup();bindings?.CancelCapture();blockThroughFrame=Time.frameCount+1;
         notice="Controller changed. Draft bindings are kept. Save Changes saves all Controller settings.";
     }
@@ -138,7 +139,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
         if(Modal){modalSelection=1-modalSelection;return;}
         wheelEditing=false;
         if(showOptions&&selection==0){ChangeCategory(delta);return;}
-        selection=showOptions?1+Wrap(selection-1+Math.Sign(delta),Rows+3):Wrap(selection+Math.Sign(delta),online?4:5);
+        selection=showOptions?1+Wrap(selection-1+Math.Sign(delta),Rows+(tab==3?4:3)):Wrap(selection+Math.Sign(delta),online?4:5);
     }
     public void NavigateHorizontal(int delta){
         if(EditingLayout){HudEditor.NavigateHorizontal(delta,wheelNavigation);return;}
@@ -252,7 +253,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
     public void BeginBindingCapture(Idas3ControlBindings.ActionId action,Idas3ControlBindings.Slot slot){
         if(bindings==null||BindingInputBlocked)return;
         if((int)action<0||(int)action>=10||(int)slot<0||(int)slot>=4)return;
-        if(slot==Idas3ControlBindings.Slot.Controller&&controllerDevices!=null&&controllerDevices.Controls.Count==0){notice="No controller active. Connect one or choose a connected device above.";return;}
+        if(slot==Idas3ControlBindings.Slot.Controller&&(bindings.ExperimentalDraftEnabled?!bindings.CanCaptureExperimental:controllerDevices!=null&&controllerDevices.Controls.Count==0)){notice="No controller active. Connect one or choose a connected device above.";return;}
         if(!IsOpen||!showOptions||tab!=3)SelectTab(3);
         controllerPage=2;
         selection=(int)action+BindingFirstSelection;bindingColumn=(int)slot;captureAction=action;captureSlot=slot;notice="";
@@ -632,7 +633,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
     }
     private void BindingCaptureView(){
         bool controller=captureSlot==Idas3ControlBindings.Slot.Controller;
-        string slot=controller?"CONTROLLER  /  "+(controllerDevices?.ActiveName??bindings.ActiveControllerProfileLabel):"KEYBOARD "+((int)captureSlot+1)+"  /  shared across devices";
+        string slot=controller?(bindings.ExperimentalDraftEnabled?"CONTROLLER / ALL CONNECTED DEVICES":"CONTROLLER  /  "+(controllerDevices?.ActiveName??bindings.ActiveControllerProfileLabel)):"KEYBOARD "+((int)captureSlot+1)+"  /  shared across devices";
         string prompt=!string.IsNullOrEmpty(bindings.CaptureError)?bindings.CaptureError:bindings.CapturePrompt;
         ModalFrame("REBIND "+Idas3ControlBindings.ActionName(captureAction).ToUpperInvariant(),slot+"\n"+prompt+"\n"+(controller?"Conflicts are rejected. Clear the named action first; unrelated actions are never swapped.":"Esc cancels. Keyboard conflicts must be cleared before reassignment."));
         if(Button(new Rect(247,404,253,48),"CLEAR SLOT")){
