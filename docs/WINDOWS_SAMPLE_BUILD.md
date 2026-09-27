@@ -1,3 +1,5 @@
+> Owner update: baseline `73e87d617a467776803c9ff59d6754ff78fa829d` built and launched on the owner’s Windows PC; the owner reports native tests and ZIP integrity passed. The local Hub route worked independently of unavailable hosted activation. The unified Controls follow-up still needs its own Windows build and hardware retest. See [current handoff](UNIFIED_CONTROLS.md).
+
 # Windows sample build and Actions handoff
 
 ## Current review update — 2026-09-27

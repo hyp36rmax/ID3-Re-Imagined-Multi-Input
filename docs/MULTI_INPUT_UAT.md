@@ -1,3 +1,7 @@
+# Current acceptance: unified Controls
+
+The owner built/launched 73e87d6 and reported the failures recorded in [Unified Controls](UNIFIED_CONTROLS.md). Use its current rebuild and retest sequence: Launch → Controls → Quick Setup → Save → immediate Test Inputs → wheel Start → wheel Options → POV press/release → simultaneous steering/pedals/shifts in gameplay. The sections below are historical milestones; the separate CONTROLS/WHEEL instructions are superseded.
+
 # Bounded sample acceptance and evidence
 
 Status: NOT TESTED on Windows or hardware. First require a complete game player package with exact source SHA and passing game/native reports. Record the Windows version, Unity/toolchain reports, actual hardware models, driver versions, owner-confirmed operating mode and whether pedals/shifter connect through the base or separate USB. Copy driver-reported names exactly; do not infer hardware from them. Fanatec combinations remain pending until observed.

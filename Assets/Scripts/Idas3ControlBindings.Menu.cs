@@ -24,7 +24,7 @@ public sealed partial class Idas3ControlBindings
         "Right",
         "Confirm",
         "Back / Cancel",
-        "Pause / Open Menu",
+        "Open Options / Pause",
         "Start (frontend)"
     };
     internal const int MenuActionCount = 8;
@@ -38,6 +38,7 @@ public sealed partial class Idas3ControlBindings
         13,
         8
     };
+    private readonly Idas3MenuExcursion legacyMenuExcursion = new Idas3MenuExcursion();
     private int menuCaptureAction = -1;
     private int menuContext = -1;
     private bool menuWasFocused, menuWasPreview;
@@ -52,6 +53,18 @@ public sealed partial class Idas3ControlBindings
     {
         if (menuCaptureAction >= 0)
             ClearMenuAssignment((MenuActionId)menuCaptureAction);
+    }
+
+    internal bool ExplicitMenuOwnsSample => ExperimentalEnabled || ExplicitMenuControlHeld;
+    internal bool ExplicitMenuControlHeld
+    {
+        get
+        {
+            if (MenuEvents != 0) return true;
+            for (int i = 0; i < menuAmounts.Length; ++i)
+                if (menuAvailable[i] && menuAmounts[i] >= MenuReleasePoint) return true;
+            return false;
+        }
     }
 
     internal float MenuActivationPoint => experimentalDraft.menuActivation;
@@ -72,6 +85,7 @@ public sealed partial class Idas3ControlBindings
 
     private void ResetMenuNavigation()
     {
+        legacyMenuExcursion.Reset();
         Array.Clear(menuArmed, 0, menuArmed.Length);
         Array.Clear(menuAmounts, 0, menuAmounts.Length);
         Array.Clear(menuAvailable, 0, menuAvailable.Length);
@@ -91,18 +105,13 @@ public sealed partial class Idas3ControlBindings
 
     internal void BeginMenuCapture(MenuActionId action, double now)
     {
-        if (!ExperimentalDraftEnabled)
-        {
-            LastError = "Select the separate multi-input draft first.";
-            return;
-        }
-
         if (!CanCaptureExperimental)
         {
             LastError = "No supported input sample is available. Connect a device before capturing.";
             return;
         }
-        BeginCapture(ActionId.Accelerate, Slot.Controller, now);
+        using (var scope = new ExperimentalScope(this))
+            BeginCaptureCore(ActionId.Accelerate, Slot.Controller, now);
         menuCaptureAction = (int)action;
         CapturePrompt = "Rest the control, then move to a comfortable navigation extent (not a mechanical stop). Escape cancels.";
     }
@@ -225,7 +234,7 @@ public sealed partial class Idas3ControlBindings
         menuWasPreview = preview;
         MenuEvents = 0;
         var settings = preview ? experimentalDraft : experimentalCurrent;
-        if (!focused || !settings.enabled || SuppressInput)
+        if (!focused || SuppressInput)
         {
             ResetMenuNavigation();
             return;
@@ -303,7 +312,9 @@ public sealed partial class Idas3ControlBindings
                 frame.SetKey(keys[i]);
         if (MenuEvent(MenuActionId.Back))
             frame.padButtons |= 0x2000;
-        if (MenuEvent(MenuActionId.Start))
-            frame.padButtons |= 0x10;
+        // The native frontend consumes Enter in every selection stage. Start is
+        // deliberately not Confirm in host settings, nor Pause during a race.
+        if (MenuEvent(MenuActionId.Start) && menuContext >= 100)
+            frame.SetKey(13);
     }
 }

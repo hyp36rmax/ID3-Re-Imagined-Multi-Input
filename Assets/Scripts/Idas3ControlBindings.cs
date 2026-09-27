@@ -83,18 +83,21 @@ public sealed partial class Idas3ControlBindings
     public string ActiveControllerProfileKey => activeProfileKey;
     public string LastNotice { get; private set; }
     public bool IsCapturing { get; private set; }
+    internal int CaptureRevision { get; private set; }
+    internal void LimitCapture(double deadline) { captureDeadline = deadline; }
     public string CapturePrompt { get; private set; } = "";
     public string CaptureError { get; private set; }
     public bool SuppressInput => IsCapturing || releaseBlocked;
-    internal bool RawPauseHeld => Held(KeyCode.Escape) ||
-        (ExperimentalEnabled
-            ? KeyboardHeld(current.actions[(int)ActionId.Pause]) || (!menuWasPreview && MenuEvent(MenuActionId.Pause))
+    internal bool RawPauseHeld => Held(KeyCode.Escape) || (!menuWasPreview && MenuEvent(MenuActionId.Pause)) ||
+        (ExplicitMenuOwnsSample
+            ? KeyboardHeld(current.actions[(int)ActionId.Pause])
             : ActionHeld(ActionId.Pause) || (!controllerReleaseBlocked && (pad.buttons & ~reconnectHeldButtons & 0x10) != 0));
-    internal bool RawOnlineHeld => Held(KeyCode.F1) || ActionHeld(ActionId.Online) ||
-        (!ExperimentalEnabled&&!controllerReleaseBlocked&&current.actions[8].pad==PadInput.None&&string.IsNullOrEmpty(current.actions[8].controlPath)&&(pad.buttons&~reconnectHeldButtons&0x20)!=0);
+    internal bool RawOnlineHeld => Held(KeyCode.F1) || KeyboardHeld(current.actions[(int)ActionId.Online]) ||
+        (!ExplicitMenuControlHeld && (ActionHeld(ActionId.Online) ||
+        (!ExperimentalEnabled&&!controllerReleaseBlocked&&current.actions[8].pad==PadInput.None&&string.IsNullOrEmpty(current.actions[8].controlPath)&&(pad.buttons&~reconnectHeldButtons&0x20)!=0)));
     public bool PauseHeld => !SuppressInput && RawPauseHeld;
     public bool OnlineHeld => !SuppressInput && RawOnlineHeld;
-    public bool ViewChangeHeld => !SuppressInput && ActionHeld(ActionId.Camera);
+    public bool ViewChangeHeld => !SuppressInput && (KeyboardHeld(current.actions[(int)ActionId.Camera]) || (!ExplicitMenuControlHeld && ActionHeld(ActionId.Camera)));
     public event System.Action Changed;
 
     public static Values Defaults()
@@ -207,7 +210,7 @@ public sealed partial class Idas3ControlBindings
     // on a physical-device change so its held button cannot finish old capture.
     public void ControllerDeviceChanged()
     {
-        EnsureInitialized();CancelCapture();ResetLegacyReconnect();pad=default;controls.Clear();restValues.Clear();captureHeldButtons.Clear();awaitingProfileSample=true;
+        EnsureInitialized();CancelCapture();ResetMenuNavigation();ResetLegacyReconnect();pad=default;controls.Clear();restValues.Clear();captureHeldButtons.Clear();awaitingProfileSample=true;
         // A newly active wheel can have a held gear selector or pedal. Guard
         // its input without disabling the independent keyboard indefinitely.
         // An in-progress capture keeps its own keyboard cancellation guard.
@@ -360,13 +363,13 @@ public sealed partial class Idas3ControlBindings
             if(control!=null&&!string.IsNullOrEmpty(control.path)&&Finite(control.value)&&Finite(control.minimum)&&Finite(control.maximum)&&control.maximum>control.minimum)controls[control.path]=control;
         PollLegacyReconnect();
         UpdateExperimentalFrame(snapshot,now);
-        if(ExperimentalDraftEnabled&&IsCapturing&&captureSlot==Slot.Controller){using(var scope=new ExperimentalScope(this))captureHeldButtons.RemoveWhere(path=>!controls.TryGetValue(path,out var control)||control.value<=.5f);}
+        if((ExperimentalDraftEnabled||menuCaptureAction>=0)&&IsCapturing&&captureSlot==Slot.Controller){using(var scope=new ExperimentalScope(this))captureHeldButtons.RemoveWhere(path=>!controls.TryGetValue(path,out var control)||control.value<=.5f);}
         else captureHeldButtons.RemoveWhere(path=>!controls.TryGetValue(path,out var control)||control.value<=.5f);
         for (int i = 0; i < 10; ++i)
         { var binding = current.actions[i]; keyboardActions[i] = Held(binding.key1) || Held(binding.key2) || Held(binding.key3); }
         bool anyHeld = ExperimentalEnabled?ExperimentalAnyAssignedHeld():AnyInputHeld();
         if(IsCapturing){
-            if(ExperimentalDraftEnabled&&captureSlot==Slot.Controller){using(var scope=new ExperimentalScope(this))PollCapture(now,AnyInputHeld());}
+            if((ExperimentalDraftEnabled||menuCaptureAction>=0)&&captureSlot==Slot.Controller){using(var scope=new ExperimentalScope(this))PollCapture(now,AnyInputHeld());}
             else PollCapture(now,anyHeld);
             return;
         }
@@ -402,8 +405,8 @@ public sealed partial class Idas3ControlBindings
             }
             if (attempted)
             {
-                IsCapturing = !accepted; if (accepted) menuCaptureAction = -1; captureArmed = false; BlockUntilRelease();
-                if(ExperimentalDraftEnabled&&captureSlot==Slot.Controller)releaseKeyboardOnly=true;
+                IsCapturing = !accepted; if (accepted) { menuCaptureAction = -1; ++CaptureRevision; } captureArmed = false; BlockUntilRelease();
+                if((ExperimentalDraftEnabled||menuCaptureAction>=0)&&captureSlot==Slot.Controller)releaseKeyboardOnly=true;
                 CaptureError = accepted ? null : LastError;
                 CapturePrompt = accepted ? (LastNotice??"Binding changed.")+" Apply to save." : "Release the control, then choose another. Escape cancels.";
                 if (!accepted) captureDeadline = now + 15;
@@ -412,8 +415,14 @@ public sealed partial class Idas3ControlBindings
             }
 
     internal void ApplyMenu(ref Idas3Native.FrameInput frame, bool genericDevice, bool preserveHeldEdges=false){
-        if (ExperimentalEnabled) ApplyExplicitMenu(ref frame);
-        else ApplyMenuCore(ref frame,genericDevice,preserveHeldEdges,current);
+        if (ExplicitMenuOwnsSample)
+        {
+            // Explicit excursions own this packet. Do not also emit legacy
+            // aliases from the same physical button, POV, or steering axis.
+            legacyMenuExcursion.Reset();
+            ApplyExplicitMenu(ref frame);
+        }
+        else { ApplyMenuCore(ref frame,genericDevice,preserveHeldEdges,current); GateLegacyMenuDirections(ref frame); }
     }
 
     private void ApplyMenuCore(ref Idas3Native.FrameInput frame,bool genericDevice,bool preserveHeldEdges,Values menuValues)
@@ -446,6 +455,24 @@ public sealed partial class Idas3ControlBindings
             if(MenuAction(ActionId.ShiftUp))frame.SetKey(38);
             if(MenuAction(ActionId.ShiftDown))frame.SetKey(40);
             if(MenuAction(ActionId.Camera))frame.SetKey(67);
+        }
+    }
+    private void GateLegacyMenuDirections(ref Idas3Native.FrameInput frame)
+    {
+        uint keys = frame.key1;
+        bool Key(int key) => (keys & (1u << (key & 31))) != 0;
+        int directions = (Key(38) || (frame.padButtons & 1) != 0 || frame.thumbLY > 16000 ? 1 : 0)
+            | (Key(40) || (frame.padButtons & 2) != 0 || frame.thumbLY < -16000 ? 2 : 0)
+            | (Key(37) || (frame.padButtons & 4) != 0 || frame.thumbLX < -16000 ? 4 : 0)
+            | (Key(39) || (frame.padButtons & 8) != 0 || frame.thumbLX > 16000 ? 8 : 0);
+        int pulse = legacyMenuExcursion.Evaluate(directions);
+        frame.padButtons &= ~15u;
+        frame.thumbLX = frame.thumbLY = 0;
+        int[] output = MenuOutputKeys;
+        for (int i = 0; i < 4; ++i)
+        {
+            ClearKey(ref frame, output[i]);
+            if ((pulse & (1 << i)) != 0) frame.SetKey(output[i]);
         }
     }
     // Preview and gameplay use the same evaluator and physical snapshot. Preview

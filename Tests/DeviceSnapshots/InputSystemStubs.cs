@@ -47,4 +47,4 @@ public struct PadState {public uint packet;public GamepadState gamepad;}
 public struct GamepadState {public ushort buttons;public byte leftTrigger,rightTrigger;public short thumbLX,thumbLY,thumbRX,thumbRY;}
 public static uint ReadGamepad(uint slot,out PadState state){state=default;return 1167;}
 }
-public static class Idas3WheelFeedback {public struct InputIdentity {public bool connected;public string key;public uint vendorId,productId;}}
+public sealed partial class Idas3WheelFeedback {public struct InputIdentity {public bool connected;public string key;public uint vendorId,productId;}}

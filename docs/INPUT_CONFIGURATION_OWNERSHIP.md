@@ -1,3 +1,5 @@
+> Current UI: [Unified Controls](UNIFIED_CONTROLS.md) replaces both old entry points. The storage boundaries below remain; references to separate CONTROLS/WHEEL screens describe the prior interface.
+
 # Input configuration ownership and pre-push review
 
 Reviewed starting source: `2a32bfdfed106e11a840f43272b7c7e06b1b7f37` on `ID3-Multi-device-input`. On 2026-09-27, local HEAD and the live origin branch matched, with no unpublished commits and a clean tree. Main/default remained `377e4ad9451a34ed4bc0acf735038372d8dec876`. This follow-up is local only.

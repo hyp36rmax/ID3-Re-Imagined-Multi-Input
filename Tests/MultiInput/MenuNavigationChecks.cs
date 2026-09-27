@@ -178,11 +178,12 @@ internal static class MenuNavigationChecks
         Check(bindings.MenuEvent(M.Back) && !bindings.MenuEvent(M.Confirm), "simultaneous Back wins Confirm");
         confirm.value = back.value = 0;
         Poll();
+        Poll(100);
         start.value = 1;
-        Poll();
+        Poll(100);
         var frame = default(Idas3Native.FrameInput);
         bindings.ApplyMenu(ref frame, true);
-        Check((frame.padButtons & 0x10) != 0 && !bindings.RawPauseHeld, "Start uses native frontend bit without opening Pause");
+        Check((frame.key0 & (1u << 13)) != 0 && frame.padButtons == 0 && !bindings.RawPauseHeld, "Start translates to native frontend confirmation without Pause");
         start.value = 0;
         Poll();
         pause.value = 1;
