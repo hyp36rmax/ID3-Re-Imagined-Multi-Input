@@ -219,6 +219,15 @@ public sealed class Idas3GameOptions
     }
     // The customization panel commits its own transaction while retaining any
     // unrelated edits in the main settings draft, including pending display edits.
+    public bool ApplyWheelSettings(){
+        EnsureInitialized();if(DisplayConfirmationPending)return false;
+        var pending=draft.Clone();draft=current.Clone();CopyWheelSettings(pending,draft);
+        bool applied=ApplyDraft();if(applied)CopyWheelSettings(current,pending);draft=pending;return applied;
+    }
+    public static void CopyWheelSettings(Values from,Values to){
+        to.wheelForceFeedback=from.wheelForceFeedback;to.wheelFeedbackStrength=from.wheelFeedbackStrength;
+        to.wheelFeedbackInvert=from.wheelFeedbackInvert;to.wheelFeedbackDevice=from.wheelFeedbackDevice;
+    }
     public bool ApplyHudCustomization(Values appearance,bool includeLayout=false){
         EnsureInitialized();if(DisplayConfirmationPending)return false;
         var pending=draft.Clone();draft=current.Clone();CopyHudCustomization(appearance,draft);

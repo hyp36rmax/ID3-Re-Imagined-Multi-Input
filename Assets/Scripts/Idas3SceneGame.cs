@@ -25,6 +25,8 @@ public sealed class Idas3SceneGame : MonoBehaviour
     private Idas3MultiplayerMenu multiplayerMenu;
     private Idas3ChallengerOverlay challenger;
     private Idas3GameOptions gameOptions;
+    private bool testMenuReleaseBlocked;
+    private readonly bool[] controllerTestActions = new bool[10];
     private Idas3PauseMenu pauseMenu;
     private Idas3ReplayLibrary replayLibrary;
     private Idas3TimeAttackGhost timeAttackGhost;
@@ -392,9 +394,13 @@ public sealed class Idas3SceneGame : MonoBehaviour
             // Keep capture's release latch until focused hardware is neutral.
             else controlBindings.Poll(physicalKey, physicalPad, Time.realtimeSinceStartupAsDouble,
                 diagnosticPad ? null : controllerDevices.Controls);
+            if(pauseMenu.TestingControls){
+                for(int action=0;action<10;++action)controllerTestActions[action]=controlBindings.DraftActionHeld((Idas3ControlBindings.ActionId)action);
+                pauseMenu.SetControllerTestSample(controlBindings.EvaluateDraftDriving(),controllerTestActions,Focused,controlBindings.SuppressInput);
+            }
             bool bindingInputBlocked = controlBindings.SuppressInput || controlBindings.IsCapturing;
             multiplayerMenu.ProcessControlInput(controlBindings.RawOnlineHeld, controlBindings.RawPauseHeld,
-                bindingInputBlocked || !Focused || raceMusicMenu.BlocksGameInput || musicReleaseBlocked || pauseMenu.AttractOptions || challenger.Active);
+                bindingInputBlocked || pauseMenu.TestingControls || !Focused || raceMusicMenu.BlocksGameInput || musicReleaseBlocked || pauseMenu.AttractOptions || challenger.Active);
             if (multiplayerMenu.IsOpen && pauseMenu.IsOpen)
             {
                 // The offline race stays paused while visiting the F1 room.
@@ -424,18 +430,25 @@ public sealed class Idas3SceneGame : MonoBehaviour
             if (controlBindings.RawPauseHeld && ((Status.flags & 1u) == 0 || pauseMenu.IsOpen || multiplayerMenu.IsOpen || raceMusicMenu.IsOpen)) frame.SetKey(27);
             multiplayerMenu.ProcessResultsInput(Held(frame, 13) || (frame.padButtons & 0x1000) != 0,
                 controlBindings.PauseHeld || Held(frame, 27) || Held(frame, 8) || (frame.padButtons & 0x2000) != 0,
-                !Focused || bindingInputBlocked);
+                !Focused || bindingInputBlocked || pauseMenu.TestingControls);
             bool disconnectedFinish = multiplayer.DisconnectedFinish;
             multiplayerMenu.ProcessDisconnectedInput(Held(frame, 13) || (frame.padButtons & 0x1000) != 0,
                 controlBindings.PauseHeld || Held(frame, 27) || Held(frame, 8) || (frame.padButtons & 0x2000) != 0,
-                !Focused || bindingInputBlocked);
+                !Focused || bindingInputBlocked || pauseMenu.TestingControls);
             if (disconnectedFinish && !multiplayer.DisconnectedFinish) musicReleaseBlocked = true;
-            bool musicInputBlocked = UpdateRaceMusic(ref frame, bindingInputBlocked);
-            bool attractInputBlocked = UpdateAttractOptions(ref frame, bindingInputBlocked || musicInputBlocked);
+            bool musicInputBlocked = UpdateRaceMusic(ref frame, bindingInputBlocked || pauseMenu.TestingControls);
+            bool attractInputBlocked = UpdateAttractOptions(ref frame, bindingInputBlocked || musicInputBlocked || pauseMenu.TestingControls);
             bool savePointerBlocked = RouteSaveMenuPointer(frame, saveMenuOwnsPointer,
                 bindingInputBlocked || musicInputBlocked || attractInputBlocked || disconnectedFinish || challenger.Active || networkRoom);
             if (diagnosticFocusOverride.HasValue) frame.flags = (frame.flags & ~1u) | (diagnosticFocusOverride.Value ? 1u : 0u);
-            if (bindingInputBlocked || musicInputBlocked || attractInputBlocked || disconnectedFinish || challenger.Active || savePointerBlocked)
+            if(pauseMenu.TestingControls){
+                // Tested pedals/buttons must not activate menus or gameplay. Physical
+                // Escape remains a recovery path even if Pause was rebound.
+                testMenuReleaseBlocked=true;
+                if(Focused&&Input.GetKeyDown(KeyCode.Escape))pauseMenu.Back();
+                previousMenuInput=frame;NeutralizeControls(ref frame);menuNavigationAxis=0;
+            }
+            else if (bindingInputBlocked || musicInputBlocked || attractInputBlocked || disconnectedFinish || challenger.Active || savePointerBlocked)
             {
                 previousMenuInput = frame;
                 NeutralizeControls(ref frame);
@@ -944,6 +957,13 @@ public sealed class Idas3SceneGame : MonoBehaviour
     private void RoutePauseInput(ref Idas3Native.FrameInput frame)
     {
         var raw = frame;
+        if(testMenuReleaseBlocked){
+            if(!pauseMenu.IsOpen||!MenuNavigationHeld(raw))testMenuReleaseBlocked=false;
+            else {
+                if(Focused&&Input.GetKeyDown(KeyCode.Escape))pauseMenu.Back();
+                previousMenuInput=raw;NeutralizeControls(ref frame);menuNavigationAxis=0;return;
+            }
+        }
         pauseMenu.SetWheelNavigation(controllerDevices.ActiveIsGeneric);
         bool pressed(int key) => Held(raw, key) && !Held(previousMenuInput, key);
         uint pressedButtons = raw.padButtons & ~previousMenuInput.padButtons;

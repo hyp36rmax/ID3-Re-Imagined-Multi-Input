@@ -20,7 +20,7 @@ public static class Idas3ControllerMenuChecks
             var bindings=new Idas3ControlBindings();bindings.Initialize(root);
             var menu=go.AddComponent<Idas3PauseMenu>();menu.Initialize(options);menu.InitializeBindings(bindings);menu.OpenAttractOptions();
             Check(menu.CategoryFocused,"Attract category focus");
-            for(int tab=0;tab<8;++tab){
+            foreach(int tab in new[]{0,1,2,3,5,6,7}){
                 Check(menu.SelectedTab==tab,"Category traversal");menu.Activate();Check(!menu.CategoryFocused,"Enter category");
                 menu.Back();Check(menu.IsOpen&&menu.CategoryFocused,"Back preserves settings screen");menu.Navigate(1);
             }
@@ -36,7 +36,7 @@ public static class Idas3ControllerMenuChecks
             menu.Back();Check(!menu.WheelEditing&&!menu.CategoryFocused,"Brake leaves edit before category");
             for(int i=0;i<5;++i)menu.NavigateHorizontal(1);menu.Activate();Check(!options.HasUnsavedChanges&&options.Current.musicVolume<music,"Wheel reaches Apply without paddles");
             menu.Back();menu.NavigateHorizontal(1);Check(menu.SelectedTab==1,"Wheel switches category");menu.Back();Check(!menu.IsOpen,"Wheel exits settings");menu.SetWheelNavigation(false);
-            menu.OpenAttractOptions();menu.SelectTab(3);menu.SelectBindingColumn(0);menu.Activate();
+            menu.OpenAttractOptions();menu.SelectTab(3);menu.SelectControllerPage(2);menu.SelectBindingColumn(0);menu.Activate();
             Check(menu.BindingChoiceVisible&&!bindings.IsCapturing,"Binding actions accessible before capture");menu.Back();Check(!menu.BindingChoiceVisible,"Controller cancels binding chooser");
             menu.Activate();menu.NavigateHorizontal(1);menu.Activate();Check(!menu.BindingChoiceVisible&&!bindings.IsCapturing,"Controller clears slot without entering capture");
             menu.Activate();menu.Activate();Check(bindings.IsCapturing,"Controller starts selected binding capture");

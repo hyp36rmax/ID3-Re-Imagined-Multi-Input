@@ -111,7 +111,21 @@ public sealed class Idas3ControllerDevices : IDisposable
         initialized = false; active = automaticResume = null;
     }
     private void OnDeviceChange(InputDevice device, InputDeviceChange change) { dirty = true; }
-    public bool Select(string key)
+    private Preference selectionCheckpoint;
+    private Device selectionActive;
+    private static Preference CopyPreference(Preference p)=>new Preference{key=p.key,profile=p.profile,label=p.label,model=p.model,generic=p.generic};
+    internal bool SelectionHasChanges=>selectionCheckpoint!=null&&selectionCheckpoint.key!=preference.key;
+    internal void BeginSelectionEdit(){selectionCheckpoint=CopyPreference(preference);selectionActive=active;}
+    internal bool ApplySelectionEdit(){if(!SelectionHasChanges)return true;if(!Select(preference.key))return false;BeginSelectionEdit();return true;}
+    internal void CancelSelectionEdit(){
+        if(selectionCheckpoint==null)return;
+        var prior=selectionCheckpoint;selectionCheckpoint=null;
+        if(preference.key==prior.key)return;
+        preference=prior;dirty=true;restoreSelection=true;
+        var selected=Find(prior.key);
+        SetActive(prior.key=="keyboard"?null:selected!=null&&selected.choice.connected?selected:selectionActive!=null&&selectionActive.choice.connected?selectionActive:FirstConnected());RebuildChoices();
+    }
+    public bool Select(string key,bool persist=true)
     {
         if (!initialized) { LastError = "Controller selection is not initialized."; return false; }
         if (string.IsNullOrEmpty(key)) { LastError = "Choose a controller from the device list."; return false; }
@@ -120,6 +134,7 @@ public sealed class Idas3ControllerDevices : IDisposable
         { LastError = "That controller is no longer in the device list."; return false; }
         var candidate = new Preference { key = key, profile = selected?.profile ?? "", label = selected?.choice.label ?? "", model = selected?.model ?? "", generic = selected?.generic ?? false };
         if (Specific && key == preference.key && selected == null) candidate = preference;
+        if(persist){
         string temporary = file + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {
@@ -133,6 +148,7 @@ public sealed class Idas3ControllerDevices : IDisposable
         {
             try { if (File.Exists(temporary)) File.Delete(temporary); } catch (Exception) { }
             LastError = "Could not save the controller selection. " + error.Message; return false;
+        }
         }
         preference = candidate; LastError = null; dirty = true; restoreSelection = false;
         if (key != "automatic") automaticResume = null;

@@ -162,6 +162,19 @@ public sealed class Idas3ControlBindings
         }
         value.version=3;
     }
+    internal sealed class DraftCheckpoint {
+        internal Values values;
+        internal Dictionary<string,ControllerProfile> profiles;
+    }
+    internal DraftCheckpoint SaveDraftCheckpoint() {
+        StoreDraftProfile();return new DraftCheckpoint{values=draft.Clone(),profiles=CloneProfiles(draftProfiles)};
+    }
+    internal void RestoreDraftCheckpoint(DraftCheckpoint checkpoint) {
+        CancelCapture();var active=draftProfiles[activeProfileKey].Clone();
+        draftProfiles=CloneProfiles(checkpoint.profiles);
+        if(!draftProfiles.ContainsKey(activeProfileKey))draftProfiles[activeProfileKey]=active;
+        draft=Compose(checkpoint.values.actions,draftProfiles[activeProfileKey].actions);LastError=null;LastNotice=null;
+    }
     public void BeginEdit() { EnsureInitialized(); CancelCapture(); draftProfiles=CloneProfiles(savedProfiles);draft = current.Clone(); LastError = null; CaptureError = null;LastNotice=null; }
     public void CancelEdit(bool waitForRelease = true) { EnsureInitialized(); CancelCapture(); draftProfiles=CloneProfiles(savedProfiles);draft = current.Clone(); LastError = null;LastNotice=null; releaseBlocked = waitForRelease;releaseKeyboardOnly=false; }
     public void ResetDraft() { EnsureInitialized(); CancelCapture(); draft = Defaults();if(genericProfile)foreach(var b in draft.actions)ClearController(b); LastError = null; CaptureError = null;LastNotice=null; releaseBlocked=false; }
@@ -265,10 +278,10 @@ public sealed class Idas3ControlBindings
     }
     private bool SetController(ActionId action,Binding binding)
     {
-        var candidate=draft.Clone();var previous=candidate.actions[(int)action].Clone();string notice=null;
+        var candidate=draft.Clone();string notice=null;
         if(ControllerIdentity(binding)!=null)for(int i=0;i<10;++i)
             if(i!=(int)action&&ControllerIdentity(candidate.actions[i])==ControllerIdentity(binding))
-            {CopyController(previous,candidate.actions[i]);notice="Swapped "+ActionName(action)+" with "+ActionName((ActionId)i)+".";break;}
+            {LastError="Already assigned to "+ActionName((ActionId)i)+". Clear that controller assignment explicitly before rebinding; no actions changed.";return false;}
         CopyController(binding,candidate.actions[(int)action]);
         if(!AcceptDraft(candidate))return false;LastNotice=notice;return true;
     }
@@ -409,14 +422,23 @@ public sealed class Idas3ControlBindings
             if(MenuAction(ActionId.Camera))frame.SetKey(67);
         }
     }
-    internal void ApplyDriving(ref Idas3Native.FrameInput frame)
+    // Preview and gameplay use the same evaluator and physical snapshot. Preview
+    // does not call Poll again or neutralize the gameplay packet.
+    internal Idas3Native.FrameInput EvaluateDraftDriving() {
+        var frame=new Idas3Native.FrameInput(); EvaluateDriving(ref frame,draft); return frame;
+    }
+    internal bool DraftActionHeld(ActionId action) => !SuppressInput &&
+        (KeyboardHeld(draft.actions[(int)action]) || (!controllerReleaseBlocked && Digital(draft.actions[(int)action])));
+    private bool KeyboardHeld(Binding b)=>Held(b.key1)||Held(b.key2)||Held(b.key3);
+    internal void ApplyDriving(ref Idas3Native.FrameInput frame) => EvaluateDriving(ref frame,current);
+    private void EvaluateDriving(ref Idas3Native.FrameInput frame,Values values)
     {
         // Remove all old action aliases before placing the mapped actions.
         // Unrelated native shortcuts and menu keys retain their existing bits.
         foreach (int key in DrivingKeys) ClearKey(ref frame, key);
         for (int i = 0; i < 10; ++i)
         {
-            var binding = current.actions[i];
+            var binding = values.actions[i];
             ClearBoundShortcut(ref frame, binding.key1); ClearBoundShortcut(ref frame, binding.key2); ClearBoundShortcut(ref frame, binding.key3);
         }
         frame.padConnected = pad.connected||controls.Count>0 ? 1u : 0u;
@@ -425,22 +447,22 @@ public sealed class Idas3ControlBindings
         frame.leftTrigger = frame.rightTrigger = 0; frame.thumbLX = 0;
         if (SuppressInput) return;
         int[] output = CanonicalKeys;
-        for (int i = 0; i < 7; ++i) if (keyboardActions[i]) frame.SetKey(output[i]);
-        if(ActionHeld(ActionId.Headlights))frame.SetKey(72);
+        for (int i = 0; i < 7; ++i) if (KeyboardHeld(values.actions[i])) frame.SetKey(output[i]);
+        if(KeyboardHeld(values.actions[9])||Digital(values.actions[9]))frame.SetKey(72);
         if (controllerReleaseBlocked||!pad.connected&&controls.Count==0) return;
         frame.padConnected = 1;
-        frame.rightTrigger = Pedal(current.actions[0]); frame.leftTrigger = Pedal(current.actions[1]);
-        frame.thumbLX = Math.Max(-32768, Math.Min(32767, Axis(current.actions[3], false) - Axis(current.actions[2], true)));
-        frame.thumbLY = SteeringOrthogonal();
-        if (Digital(current.actions[4])) frame.padButtons |= 0x2000;
-        if (Digital(current.actions[5])) frame.padButtons |= 0x4000;
-        if (Digital(current.actions[6])) frame.padButtons |= 0x8000;
+        frame.rightTrigger = Pedal(values.actions[0]); frame.leftTrigger = Pedal(values.actions[1]);
+        frame.thumbLX = Math.Max(-32768, Math.Min(32767, Axis(values.actions[3], false) - Axis(values.actions[2], true)));
+        frame.thumbLY = SteeringOrthogonal(values);
+        if (Digital(values.actions[4])) frame.padButtons |= 0x2000;
+        if (Digital(values.actions[5])) frame.padButtons |= 0x4000;
+        if (Digital(values.actions[6])) frame.padButtons |= 0x8000;
     }
-    private int SteeringOrthogonal()
+    private int SteeringOrthogonal(Values values)
     {
         // thumbLX is virtual steering. Its radial dead zone must use the other
         // axis of that same stick, never an unrelated physical left-stick Y.
-        var left=current.actions[(int)ActionId.SteerLeft];var right=current.actions[(int)ActionId.SteerRight];
+        var left=values.actions[(int)ActionId.SteerLeft];var right=values.actions[(int)ActionId.SteerRight];
         bool customLeft=!string.IsNullOrEmpty(left.controlPath),customRight=!string.IsNullOrEmpty(right.controlPath);
         if(customLeft||customRight)
         {

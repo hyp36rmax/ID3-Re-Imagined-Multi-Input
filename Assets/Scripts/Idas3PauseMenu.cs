@@ -3,7 +3,7 @@ using UnityEngine;
 
 // The host owns pause/input/network behavior. This view emits explicit commands
 // and remains usable while an online race continues at its normal source rate.
-public sealed class Idas3PauseMenu : MonoBehaviour
+public sealed partial class Idas3PauseMenu : MonoBehaviour
 {
     public enum Command {None,Resume,Restart,ReturnToCourse,LeaveOnline,Quit,Retire,FullTune,Replays}
     private const float Width=1040,Height=680;
@@ -11,7 +11,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     private static readonly Color Raised=new Color32(34,36,42,255),Edge=new Color32(65,68,76,255);
     private static readonly Color Red=new Color32(222,35,49,255),Muted=new Color32(164,166,175,255);
     private static readonly Color PromptYellow=new Color32(255,221,44,255);
-    private static readonly string[] Tabs={"AUDIO","GRAPHICS","GAMEPLAY","CONTROLS","WHEEL","RECORDS","REPLAYS","HUD"};
+    private static readonly string[] Tabs={"AUDIO","GRAPHICS","GAMEPLAY","CONTROLLER","FORCE FEEDBACK","RECORDS","REPLAYS","HUD"};
     public string ReplayStatus {get;set;}="Finished recordings are saved on this computer.";
     public string CommunityStatus {get;set;}="Community times ready.";
     public Idas3Updates Updates {get;set;}
@@ -80,7 +80,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         controllerDevices.ActiveDeviceChanged+=ControllerDeviceChanged;
     }
     private void ControllerDeviceChanged(){
-        bindings?.CancelCapture();blockThroughFrame=Time.frameCount+1;
+        CancelQuickSetup();bindings?.CancelCapture();blockThroughFrame=Time.frameCount+1;
         notice="Controller changed. Draft bindings are kept. APPLY saves all profiles.";
     }
     public void SetContext(bool isOnline,bool restartAllowed,string track,bool retireAllowed=false){online=isOnline;canRetire=retireAllowed&&!isOnline;canRestart=restartAllowed;courseName=string.IsNullOrWhiteSpace(track)?"MOUNTAIN PASS":track;}
@@ -102,9 +102,10 @@ public sealed class Idas3PauseMenu : MonoBehaviour
             AttractOptions=attractContext;
             previousCursorVisible=Cursor.visible;previousCursorLock=Cursor.lockState;
             Cursor.lockState=CursorLockMode.None;Cursor.visible=true;
-            showOptions=attractContext;selection=0;wheelEditing=false;pending=Command.None;notice="";options?.BeginEdit();bindings?.BeginEdit();
+            controllerDevices?.BeginSelectionEdit();controllerTesting=false;showOptions=attractContext;selection=0;wheelEditing=false;pending=Command.None;notice="";options?.BeginEdit();bindings?.BeginEdit();
             if(attractContext){tab=0;queued=Command.None;AttractHoldProgress=0;}
         }else{
+            CancelQuickSetup();controllerTesting=false;controllerDevices?.CancelSelectionEdit();
             if(CustomizingHud)HudCustomization.Close(false);
             if(HudEditor!=null&&HudEditor.IsOpen)HudEditor.Close(false);
             // Returning to driving must preserve a held pedal or steering axis.
@@ -120,6 +121,8 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     public void SelectTab(int index){
         if(!IsOpen)SetOpen(true);
         if(bindings!=null&&bindings.IsCapturing)return;
+        if(index==4){CancelQuickSetup();controllerTesting=false;index=3;controllerPage=4;wheelFeedback?.RefreshDevices();}
+        if(index!=3){CancelQuickSetup();controllerTesting=false;}
         if(!showOptions){options.BeginEdit();bindings?.BeginEdit();}showOptions=true;tab=Wrap(index,Tabs.Length);selection=1;wheelEditing=false;notice="";
         if(tab==3&&controllerDevices!=null)bindingColumn=controllerDevices.Controls.Count>0?3:0;
         if(tab==4)wheelFeedback?.RefreshDevices();
@@ -145,7 +148,8 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(wheelNavigation&&!wheelEditing){Navigate(delta);return;}
         if(!showOptions)return;
         if(selection==0){ChangeCategory(delta);return;}
-        if(selection<=Rows){if(tab==3){if(DeviceRowSelected)ChangeControllerDevice(Math.Sign(delta));else bindingColumn=Wrap(bindingColumn+Math.Sign(delta),4);}else Adjust(selection-1,Math.Sign(delta));}
+        if(tab==3){ControllerHorizontal(delta);return;}
+        if(selection<=Rows)Adjust(selection-1,Math.Sign(delta));
     }
     public void Activate(){
         if(EditingLayout){HudEditor.Activate();return;}
@@ -157,6 +161,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(pending!=Command.None){if(modalSelection==1){queued=pending;pending=Command.None;}else pending=Command.None;return;}
         if(!showOptions){MainAction(selection);return;}
         if(selection==0){selection=1;return;}
+        if(tab==3){ControllerActivate();return;}
         if(tab==2&&selection==7){if(FullTuneAvailable)queued=Command.FullTune;return;}
         if(tab==2&&selection==8){if(AttractOptions)Updates?.Activate();return;}
         if(tab==5&&selection==2){Application.OpenURL(Idas3CommunityTimes.ServiceUrl);return;}
@@ -176,14 +181,16 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(CustomizingHud){HudCustomization.Back();return;}
         if(EditingHud){HudEditor.Close(false);return;}
         if(!IsOpen)return;
+        if(controllerTesting){controllerTesting=false;selection=1;blockThroughFrame=Time.frameCount+1;return;}
         if(bindingChoice){bindingChoice=false;return;}
         if(bindings!=null&&bindings.IsCapturing){bindings.CancelCapture();notice="Binding unchanged.";return;}
         if(options.DisplayConfirmationPending){options.RevertDisplay();notice="Display change reverted.";return;}
         if(pending!=Command.None){pending=Command.None;return;}
+        if(quickCheckpoint!=null){CancelQuickSetup();notice="Quick Setup cancelled; previous draft restored.";return;}
         if(wheelEditing){wheelEditing=false;return;}
         if(showOptions&&selection!=0){selection=0;notice="";return;}
         if(AttractOptions){SetOpen(false);return;}
-        if(showOptions){options.BeginEdit();bindings?.CancelEdit(false);showOptions=false;selection=1;notice="";return;}
+        if(showOptions){controllerDevices?.CancelSelectionEdit();controllerDevices?.BeginSelectionEdit();options.BeginEdit();bindings?.CancelEdit(false);showOptions=false;selection=1;notice="";return;}
         queued=Command.Resume;
     }
     public bool TryConsumeCommand(out Command command){command=queued;queued=Command.None;return command!=Command.None;}
@@ -194,9 +201,9 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     public void CancelDiagnosticCapture(){diagnosticTarget=null;}
     private bool BindingInputBlocked=>bindings!=null&&(bindings.IsCapturing||bindings.SuppressInput);
     private bool Modal=>bindingChoice||pending!=Command.None||options.DisplayConfirmationPending||(bindings!=null&&bindings.IsCapturing);
-    private int BindingFirstSelection=>controllerDevices!=null?2:1;
-    private bool DeviceRowSelected=>controllerDevices!=null&&selection==1;
-    private int Rows=>tab==7?12:tab==6?4:tab==5?2:tab==0?5:tab==4?4:tab==2?11:tab==1?8:bindings!=null?10+BindingFirstSelection-1:0;
+    private int BindingFirstSelection=>3;
+    private bool DeviceRowSelected=>controllerDevices!=null&&selection==2;
+    private int Rows=>tab==3?ControllerRows:tab==7?12:tab==6?4:tab==5?2:tab==0?5:tab==4?4:tab==2?11:tab==1?8:bindings!=null?10+BindingFirstSelection-1:0;
     private static int Wrap(int value,int count)=>(value%count+count)%count;
     private void Update(){
         double now=Time.realtimeSinceStartupAsDouble;options?.Tick(now);
@@ -221,22 +228,20 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     }
     private void Confirm(Command command){pending=command;modalSelection=0;}
     private void ChangeCategory(int delta){
-        tab=Wrap(tab+Math.Sign(delta),Tabs.Length);
+        CancelQuickSetup();controllerTesting=false;
+        do{tab=Wrap(tab+Math.Sign(delta),Tabs.Length);}while(tab==4);
         if(tab==3&&controllerDevices!=null)bindingColumn=controllerDevices.Controls.Count>0?3:0;
         if(tab==4)wheelFeedback?.RefreshDevices();
     }
     internal bool CategoryFocused=>showOptions&&selection==0;
     private void Apply(){
-        if(tab==3){
-            if(bindings==null){notice="Control bindings are unavailable.";return;}
-            notice=bindings.ApplyDraft()?"CONTROLS SAVED — all edited device profiles":bindings.LastError??"Could not save controls.";return;
-        }
+        if(tab==3){ControllerApply();return;}
         if(options.ApplyDraft()){
             modalSelection=0;notice=options.DisplayConfirmationPending?"Review the new display settings.":"OPTIONS SAVED";
         }else notice=options.LastError??"Could not apply options.";
     }
     private void ResetDefaults(){
-        if(tab==3)bindings?.ResetDraft();else options.ResetDraft();
+        if(tab==3){ControllerDiscard();return;}else options.ResetDraft();
         notice="Defaults selected. Apply to save.";
     }
     public void BeginBindingCapture(Idas3ControlBindings.ActionId action,Idas3ControlBindings.Slot slot){
@@ -244,6 +249,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if((int)action<0||(int)action>=10||(int)slot<0||(int)slot>=4)return;
         if(slot==Idas3ControlBindings.Slot.Controller&&controllerDevices!=null&&controllerDevices.Controls.Count==0){notice="No controller active. Connect one or choose a connected device above.";return;}
         if(!IsOpen||!showOptions||tab!=3)SelectTab(3);
+        controllerPage=2;
         selection=(int)action+BindingFirstSelection;bindingColumn=(int)slot;captureAction=action;captureSlot=slot;notice="";
         bindings.BeginCapture(action,slot,Time.realtimeSinceStartupAsDouble);
     }
@@ -268,8 +274,8 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         if(controllerDevices==null||direction==0||BindingInputBlocked)return;
         var choices=controllerDevices.Choices;if(choices.Count==0)return;
         int at=0;for(int i=0;i<choices.Count;++i)if(choices[i].key==controllerDevices.SelectedKey){at=i;break;}
-        selection=1;
-        if(!controllerDevices.Select(choices[Wrap(at+Math.Sign(direction),choices.Count)].key))notice=controllerDevices.LastError??"Could not select that controller.";
+        CancelQuickSetup();selection=2;
+        if(!controllerDevices.Select(choices[Wrap(at+Math.Sign(direction),choices.Count)].key,false))notice=controllerDevices.LastError??"Could not select that controller.";
     }
     private void KeepDisplay(){if(options.ConfirmDisplay())notice="OPTIONS SAVED";else notice=options.LastError??"Display change reverted.";}
     private void Adjust(int row,int direction){
@@ -455,8 +461,9 @@ public sealed class Idas3PauseMenu : MonoBehaviour
     }
     private void OptionsView(){
         const float categoryTop=139,categoryStep=48,categoryHeight=39;
-        for(int i=0;i<Tabs.Length;++i){var rect=new Rect(30,categoryTop+i*categoryStep,207,categoryHeight);if(Button(rect,Tabs[i],tab==i))SelectTab(i);if(selection==0&&tab==i)Frame(rect,Color.white);}
-        Text(new Rect(31,categoryTop+Tabs.Length*categoryStep+5,205,88),wheelNavigation?"STEERING: SELECT\nACCEL: EDIT / DONE\nBRAKE: BACK\nAPPLY to save":"CHOOSE CATEGORY\n↑ ↓ / STEERING\nCONFIRM to edit\nBACK to categories",wrapped);
+        for(int i=0;i<Tabs.Length;++i){if(i==4)continue;var rect=new Rect(30,categoryTop+(i>4?i-1:i)*categoryStep,207,categoryHeight);if(Button(rect,Tabs[i],tab==i))SelectTab(i);if(selection==0&&tab==i)Frame(rect,Color.white);}
+        Text(new Rect(31,categoryTop+(Tabs.Length-1)*categoryStep+5,205,88),wheelNavigation?"STEERING: SELECT\nACCEL: EDIT / DONE\nBRAKE: BACK\nAPPLY to save":"CHOOSE CATEGORY\n↑ ↓ / STEERING\nCONFIRM to edit\nBACK to categories",wrapped);
+        if(tab==3){ControllerView();return;}
         Fill(new Rect(262,130,748,413),Panel);
         Text(new Rect(282,144,660,36),tab==3?"CONTROLLER & KEYBOARD":Tabs[tab],heading);
         if(selection==0)Frame(new Rect(276,139,716,42),Red);
@@ -622,7 +629,7 @@ public sealed class Idas3PauseMenu : MonoBehaviour
         bool controller=captureSlot==Idas3ControlBindings.Slot.Controller;
         string slot=controller?"CONTROLLER  /  "+(controllerDevices?.ActiveName??bindings.ActiveControllerProfileLabel):"KEYBOARD "+((int)captureSlot+1)+"  /  shared across devices";
         string prompt=!string.IsNullOrEmpty(bindings.CaptureError)?bindings.CaptureError:bindings.CapturePrompt;
-        ModalFrame("REBIND "+Idas3ControlBindings.ActionName(captureAction).ToUpperInvariant(),slot+"\n"+prompt+"\n"+(controller?"Assigned controller controls swap actions. APPLY saves your changes.":"Esc cancels. Keyboard conflicts must be cleared before reassignment."));
+        ModalFrame("REBIND "+Idas3ControlBindings.ActionName(captureAction).ToUpperInvariant(),slot+"\n"+prompt+"\n"+(controller?"Conflicts are rejected. Clear the named action first; unrelated actions are never swapped.":"Esc cancels. Keyboard conflicts must be cleared before reassignment."));
         if(Button(new Rect(247,404,253,48),"CLEAR SLOT")){
             bool cleared=bindings.ClearDraft(captureAction,captureSlot);bindings.CancelCapture();
             notice=cleared?"Binding cleared. Apply to save.":bindings.LastError??"Could not clear this binding.";

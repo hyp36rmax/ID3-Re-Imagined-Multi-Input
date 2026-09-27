@@ -42,6 +42,16 @@ No Windows native/player compilation, serialization self-test, packaged-document
 
 The agreed later player-facing direction remains one Controller menu containing Quick Setup, Overview, Bind Controls, Test Controls and Force Feedback, preserving existing configurations and keeping normal setup simple. This publication/readiness task implements none of that menu or any production input/FFB work. This outcome record is a separate local commit for review and is not included in the already published UAT commit.
 
+## 2026-09-27 — Functional Controller menu baseline (local review)
+
+The scope was expanded from a future menu direction to five working pages using existing single-controller capabilities. We inspected the pause menu, binding capture/evaluation, device preferences and FFB option/lifecycle paths. Two existing behaviors needed adjustment: selecting an input device immediately saved it, and capturing an occupied controller control automatically swapped an unrelated action. Selection is now a menu draft, and conflicts are rejected with the affected action named so clearing is explicit.
+
+Quick Setup guides steering/pedals and optional shifting, retains a checkpoint for Cancel, and shows assignments before Apply. Overview reads saved/draft mappings and real device status. Bind Controls reuses capture and clear. Test Controls calls the same driving binding evaluator on the normal physical sample, before menu packet neutralization; it shows binding demand rather than claiming post-physics steering response. Tested inputs cannot operate gameplay or menus, and a held-input exit guard keeps them from becoming a fresh confirmation. Force Feedback exposes existing settings through a scoped apply that preserves unrelated drafts. Native force calculations and lifecycle guards are unchanged.
+
+39 portable checks pass against the actual binding/game-option classes with platform adapters. They cover conflicts, cancellation, saved-format compatibility, mapped preview parity, reversed pedals, reconnect/keyboard recovery and FFB-only save/rollback. An adapter initially lacked JsonUtility.FromJsonOverwrite; the test adapter was completed without changing production serialization. C# syntax checks passed. Explicit Unity flow checks were added and existing menu/device smoke expectations adjusted, but Unity/player compilation, UI rendering, Windows persistence and physical hardware checks have not run here. This is an implemented local baseline awaiting Windows acceptance, not a claim that the original input/FFB reports have been fixed.
+
+The change stays on ID3-Multi-device-input in a separate local commit after the earlier unpushed log-only commit. Next is code review, publication approval, a full-game Windows build and the documented Controller menu acceptance checks. The isolated identity-probe build cannot validate these production menu files. Simultaneous multi-device input, production physical-identity resolution and FFB tuning remain pending.
+
 ## Future evidence entry format
 
 Append a dated entry with milestone/build, purpose, setup, procedure/run ID, capture verdict, identity verdict, expected versus actual behavior, evidence package location, findings, limitations and the next decision. Retain failed or inconclusive attempts. Never infer a hardware success from a synthetic test or a capture-only PASS.

@@ -1,0 +1,47 @@
+using System;
+using System.IO;
+using UnityEngine;
+using UnityEngine.InputSystem;
+
+// Explicit Unity editor validation. Never runs during normal startup or creates motor output.
+public static class Idas3ControllerFoundationChecks
+{
+    private sealed class Platform:Idas3GameOptions.IPlatform {
+        public int Width=>1280;public int Height=>720;public int DisplayMode=>0;public double Now=>0;
+        public Idas3GameOptions.ResolutionChoice[] Resolutions=>new[]{new Idas3GameOptions.ResolutionChoice(1280,720)};
+        public void Apply(Idas3GameOptions.Values a,Idas3GameOptions.Values b,bool display){}
+    }
+    static int checks;
+    static void Check(bool ok,string why){++checks;if(!ok)throw new Exception(why);}
+    public static void Run(){
+        checks=0;string root=Path.Combine(Path.GetTempPath(),"id3-menu-foundation-"+Guid.NewGuid().ToString("N"));
+        var go=new GameObject("Controller foundation checks");var pad=InputSystem.AddDevice<Gamepad>();
+        Idas3ControllerDevices devices=null;
+        try{
+            var bindings=new Idas3ControlBindings();bindings.Initialize(root);
+            var options=new Idas3GameOptions(new Platform());options.Initialize(root);
+            devices=new Idas3ControllerDevices(()=>0,(uint slot,out Idas3Native.PadState state)=>{state=default;return 1167;},d=>d==pad);
+            devices.ActiveDeviceChanged+=()=>{bindings.SelectControllerProfile(devices.ActiveProfileKey,devices.ActiveName,devices.ActiveIsGeneric);bindings.ControllerDeviceChanged();};
+            devices.Initialize(root);Check(devices.Controls.Count>0,"synthetic selected controller exposes existing controls");
+            devices.Select("automatic");string deviceFile=Path.Combine(root,"controller-device.json"),savedDevice=File.ReadAllText(deviceFile);
+            bindings.BeginEdit();Check(bindings.ApplyDraft(),"initial binding fixture");string savedBindings=File.ReadAllText(bindings.FilePath);
+            var menu=go.AddComponent<Idas3PauseMenu>();menu.Initialize(options);menu.InitializeBindings(bindings);menu.InitializeControllerDevices(devices);menu.OpenAttractOptions();menu.SelectTab(3);
+            bindings.Poll(k=>false,default,0,devices.Controls);
+            for(int page=0;page<5;++page){menu.SelectControllerPage(page);Check(menu.ControllerPage==page&&menu.IsOpen,"all five pages reachable");}
+            menu.SelectControllerPage(0);menu.Navigate(1);menu.Navigate(1);menu.Activate();Check(bindings.IsCapturing,"Quick Setup uses real capture");
+            menu.Back();bindings.Poll(k=>false,default,1,devices.Controls);menu.Back();
+            Check(File.ReadAllText(bindings.FilePath)==savedBindings&&!bindings.HasUnsavedChanges,"Quick Setup cancel retains saved/draft assignments");
+            devices.Select("keyboard",false);Check(File.ReadAllText(deviceFile)==savedDevice&&devices.SelectionHasChanges,"preview selection does not save");
+            menu.SetOpen(false);Check(devices.SelectedKey=="automatic"&&File.ReadAllText(deviceFile)==savedDevice,"closing restores device selection");
+            menu.OpenAttractOptions();menu.SelectTab(3);menu.SelectControllerPage(2);menu.SelectBindingColumn(0);menu.Activate();
+            Check(menu.BindingChoiceVisible,"Bind Controls opens existing capture/clear chooser");menu.Back();
+            menu.SelectControllerPage(3);menu.Navigate(1);menu.Navigate(1);menu.Activate();Check(menu.TestingControls&&menu.BlocksGameInput,"test mode blocks gameplay");
+            menu.Back();Check(!menu.TestingControls&&menu.IsOpen,"Back leaves test without closing menu");
+            menu.SelectControllerPage(4);menu.Navigate(1);menu.Navigate(1);bool previous=options.Draft.wheelForceFeedback;menu.Activate();
+            Check(options.Draft.wheelForceFeedback!=previous&&options.Current.wheelForceFeedback==previous,"FFB page edits draft only without backend");
+            menu.SetOpen(false);Check(File.ReadAllText(deviceFile)==savedDevice&&File.ReadAllText(bindings.FilePath)==savedBindings,"no implicit saves across pages");
+            Directory.CreateDirectory("Verification/controller-foundation");File.WriteAllText("Verification/controller-foundation/unity-checks.txt","PASS "+checks+" checks; synthetic devices only; no hardware output.\n");
+            Debug.Log("PASS Controller Menu Foundation Unity checks: "+checks);
+        }finally{UnityEngine.Object.DestroyImmediate(go);devices?.Dispose();InputSystem.RemoveDevice(pad);if(Directory.Exists(root))Directory.Delete(root,true);}
+    }
+}
