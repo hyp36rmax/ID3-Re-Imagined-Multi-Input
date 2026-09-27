@@ -102,6 +102,10 @@ internal static class ControlsViewChecks
         view.Navigate(1);
         view.Activate();
         Check(services.menuAction == Idas3ControlBindings.MenuActionId.Up, "menu row uses explicit menu binding service");
+        Draw("Not assigned");
+        view.Navigate(1);
+        view.Activate();
+        Check(services.menuAction == Idas3ControlBindings.MenuActionId.Down, "pointer row focus is retained when resuming keyboard navigation");
         view.Select(4);
         Draw();
         Check(GUI.Labels.Contains("Force-output device"), "FFB selector names output ownership");

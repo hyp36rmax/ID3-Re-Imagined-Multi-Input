@@ -142,7 +142,10 @@ internal sealed class Idas3ControlsSetupView
         bool old = GUI.enabled;
         GUI.enabled = old && enabled;
         if (GUI.Button(rect, label, button))
+        {
+            focus = index;
             action();
+        }
         GUI.enabled = old;
     }
 

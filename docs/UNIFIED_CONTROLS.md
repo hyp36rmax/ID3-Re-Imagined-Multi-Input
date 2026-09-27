@@ -47,7 +47,7 @@ Start is emitted as native frontend Enter only in frontend contexts. It is not m
 
 ## Build and evidence
 
-Run `python Tools/CI/Run-Portable.py` with Python 3.11+, .NET 8 and a C++ compiler. The local run passed 166 multi-input/setup/view checks, 101 provider/snapshot checks, 57 Controller checks, 46 UAT and 34 diagnostic checks, native JSON/access checks and 9 packaging cases. It compiles actual binding/setup/view code against headless adapters, exercises persistence, and retains logs under `Verification/ci/portable`. Headless GUI adapters test commands, not pixel layout. Unity editor checks in `Idas3ControllerFoundationChecks` were updated to use the real module adapter and are invoked by the full-game builder.
+Run `python Tools/CI/Run-Portable.py` with Python 3.11+, .NET 8 and a C++ compiler. The local run passed 167 multi-input/setup/view checks, 101 provider/snapshot checks, 57 Controller checks, 46 UAT and 34 diagnostic checks, native JSON/access checks and 9 packaging cases. It compiles actual binding/setup/view code against headless adapters, exercises persistence, and retains logs under `Verification/ci/portable`. Headless GUI adapters test commands, not pixel layout. Unity editor checks in `Idas3ControllerFoundationChecks` were updated to use the real module adapter and are invoked by the full-game builder.
 
 On the owner's already activated Windows machine, use a **new full checkout of the reviewed follow-up commit**, with the same successful toolchain as the baseline. Close Unity, then run from that checkout:
 

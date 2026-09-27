@@ -162,3 +162,5 @@ Local portable checks passed, including production setup/view command adapters, 
 Original files/schemas and FFB protections are retained; no force tuning, identity matching, polling loop or native gameplay-response change was added. Reconnect/restart still requires reassignment. Fanatec hardware combinations remain pending; driver names do not prove identity or compatibility. Reports of digital-feeling input, limited multi-USB support and excessive FFB concern the original game.
 
 The owner's generated ProjectSettings.asset diff was requested and remains unavailable; generated DLLs/settings were not copied or committed. Next: review this local commit, build it in a separate Windows checkout using the owner's existing Hub activation, retain logs/full ZIP, and run the short retest in docs/UNIFIED_CONTROLS.md. No push performed.
+
+A final input-focus review found that clicking a binding row did not move the module’s keyboard focus to that row. The local follow-up sets focus before dispatching the click and tests the next keyboard navigation event. Rendered acceptance remains pending.
