@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
 <ItemGroup>
+<Compile Include="../../Assets/Scripts/Idas3ControlBindings.Observed.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControlBindings.Capture.cs" />
 <Compile Include="../../Assets/Scripts/ControlsSetup/Idas3MenuExcursion.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControlBindings.Setup.cs" />

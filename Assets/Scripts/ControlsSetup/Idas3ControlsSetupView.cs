@@ -25,6 +25,7 @@ internal sealed class Idas3ControlsSetupView
     private long loggedInventory = -1;
     private Idas3Native.FrameInput sample;
     private bool sampleAvailable;
+    private readonly Idas3OtherInputs otherInputs = new Idas3OtherInputs();
     private readonly bool[] held = new bool[10];
     internal bool Testing => Page == 3 && !Setup.Open;
 
@@ -38,6 +39,7 @@ internal sealed class Idas3ControlsSetupView
     {
         if (Setup.Open || services.Bindings.IsCapturing || page == 0 && services.SaveIncomplete)
             return;
+        otherInputs.Clear();
         Page = (page + Pages.Length) % Pages.Length;
         focus = Page;
         scroll = Vector2.zero;
@@ -82,6 +84,8 @@ internal sealed class Idas3ControlsSetupView
         sample = frame;
         Array.Copy(buttons, held, held.Length);
         sampleAvailable = focused && !suppressed;
+        if (Testing) otherInputs.Update(services.Devices.Snapshot, services.Bindings, Time.realtimeSinceStartupAsDouble, focused);
+        else otherInputs.Clear();
     }
 
     private void Styles()
@@ -374,12 +378,19 @@ internal sealed class Idas3ControlsSetupView
         float steer = sample.thumbLX / (sample.thumbLX < 0 ? 32768f : 32767f);
         if (Key(sample, 65) || Key(sample, 68))
             steer = (Key(sample, 68) ? 1 : 0) - (Key(sample, 65) ? 1 : 0);
-        Bar(290, "Wheel / Stick", sampleAvailable ? steer : 0, true);
-        Bar(345, "Gas", sampleAvailable ? (Key(sample, 87) ? 1 : sample.rightTrigger / 255f) : 0, false);
-        Bar(400, "Brake", sampleAvailable ? (Key(sample, 83) ? 1 : sample.leftTrigger / 255f) : 0, false);
-        Label(286, 464, 340, 35, "Shift Up: " + (sampleAvailable && held[4] ? "ON" : "OFF"));
-        Label(640, 464, 340, 35, "Shift Down: " + (sampleAvailable && held[5] ? "ON" : "OFF"));
-        Label(286, 503, 695, 39, "Assigned input before native response. Pointer / Escape to leave.", secondary);
+        Bar(279, "Steering", sampleAvailable ? steer : 0, true);
+        Bar(321, "Gas", sampleAvailable ? (Key(sample, 87) ? 1 : sample.rightTrigger / 255f) : 0, false);
+        Bar(363, "Brake", sampleAvailable ? (Key(sample, 83) ? 1 : sample.leftTrigger / 255f) : 0, false);
+        Label(286, 403, 340, 35, "Shift Up: " + (sampleAvailable && held[4] ? "ON" : "OFF"));
+        Label(640, 403, 340, 35, "Shift Down: " + (sampleAvailable && held[5] ? "ON" : "OFF"));
+        Label(286, 443, 695, 28, "Other Inputs" + (otherInputs.Visible.Count > Idas3OtherInputs.RowLimit ? " · +" + (otherInputs.Visible.Count - Idas3OtherInputs.RowLimit) + " active/recent" : ""), heading);
+        for (int i = 0; i < Math.Min(Idas3OtherInputs.RowLimit, otherInputs.Visible.Count); ++i)
+        {
+            var entry = otherInputs.Visible[i];
+            Label(286 + (i % 2) * 352, 477 + (i / 2) * 24, 342, 24,
+                entry.Display + (entry.Active ? "" : " · released"), secondary);
+        }
+        Label(286, 553, 695, 31, "Assigned input before native response. Rest axes on entry. Pointer / Escape exits.", secondary);
     }
 
     private void Bar(float y, string name, float amount, bool centered)

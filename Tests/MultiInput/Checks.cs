@@ -91,6 +91,7 @@ static class Checks {
             }
             count += MenuNavigationChecks.Run(Path.Combine(root, "menu"));
             count += CaptureFollowupChecks.Run(Path.Combine(root, "capture-followup"));
+            count += OtherInputChecks.Run(Path.Combine(root, "other-inputs"));
             count += SetupChecks.Run(Path.Combine(root, "setup"));
             count += OwnershipChecks.Run(Path.Combine(root, "ownership"));
             Console.WriteLine("PASS "+count+" production multi-input checks; no Unity/Windows/hardware claim.");

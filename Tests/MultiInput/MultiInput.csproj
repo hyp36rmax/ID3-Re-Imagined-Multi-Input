@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
 <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework><EnableDefaultCompileItems>false</EnableDefaultCompileItems></PropertyGroup>
 <ItemGroup>
+<Compile Include="../../Assets/Scripts/ControlsSetup/Idas3OtherInputs.cs" />
+<Compile Include="../../Assets/Scripts/Idas3ControlBindings.Observed.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControlBindings.Capture.cs" />
 <Compile Include="../../Assets/Scripts/ControlsSetup/Idas3ControlsServices.cs" />
 <Compile Include="../../Assets/Scripts/ControlsSetup/Idas3ControlsSetupView.cs" />
@@ -23,7 +25,7 @@
 
 <Compile Include="../DeviceSnapshots/InputSystemStubs.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControllerReconnectChecks.cs" />
-<Compile Include="CaptureFollowupChecks.cs" /><Compile Include="Checks.cs" /><Compile Include="OwnershipChecks.cs" /><Compile Include="SetupChecks.cs" /><Compile Include="ControlsViewChecks.cs" /><Compile Include="MenuNavigationChecks.cs" />
+<Compile Include="CaptureFollowupChecks.cs" /><Compile Include="OtherInputChecks.cs" /><Compile Include="Checks.cs" /><Compile Include="OwnershipChecks.cs" /><Compile Include="SetupChecks.cs" /><Compile Include="ControlsViewChecks.cs" /><Compile Include="MenuNavigationChecks.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControllerSave.cs" />
 </ItemGroup>
 </Project>
