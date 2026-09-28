@@ -6,7 +6,6 @@ internal sealed class Idas3SetupSession
 {
     internal enum Stage
     {
-        Choose,
         Capturing,
         ReviewInput,
         TimedOut,
@@ -27,35 +26,55 @@ internal sealed class Idas3SetupSession
     private int revision;
     internal Stage State { get; private set; } = Stage.Closed;
     internal int Step { get; private set; }
-    internal bool Gamepad { get; private set; }
+    internal bool DigitalSteering { get; private set; }
+
+    private bool steeringRight;
+    private Idas3ControlBindings.DraftCheckpoint steeringCheckpoint;
     internal double Deadline { get; private set; }
     internal string Error { get; private set; }
     internal bool Open => State != Stage.Closed;
     internal bool Complete => State == Stage.Review;
-    internal string Instruction => Step == 0 ? (Gamepad ? "Move the steering stick right" : "Center the wheel, then turn it right") : Step == 1 ? "Press the gas control" : Step == 2 ? "Press the brake control" : Step == 3 ? "Press Shift Up" : "Press Shift Down";
+    internal string Instruction
+    {
+        get
+        {
+            if (Step == 0)
+                return DigitalSteering ? (steeringRight ? "Press Right." : "Press Left.") : "Move your wheel or stick.";
+            if (Step == 1) return "Press the gas control.";
+            if (Step == 2) return "Press the brake control.";
+            return Step == 3 ? "Press Shift Up." : "Press Shift Down.";
+        }
+    }
+    private Idas3ControlBindings.ActionId CaptureAction => Step == 0 && DigitalSteering && !steeringRight ? Idas3ControlBindings.ActionId.SteerLeft : Actions[Step];
 
     internal Idas3SetupSession(Idas3ControlBindings bindings)
     {
         this.bindings = bindings;
     }
 
-    internal void OpenChoice()
+    internal void Begin(double now)
     {
-        State = Stage.Choose;
+        checkpoint = bindings.BeginWheelSetup();
+        steeringCheckpoint = bindings.SaveDraftCheckpoint();
+        Step = 0;
+        DigitalSteering = steeringRight = false;
+        StartCapture(now);
     }
 
-    internal void Begin(bool gamepad, double now)
+    internal void SelectSteeringType(bool digital, double now)
     {
-        Gamepad = gamepad;
-        checkpoint = bindings.BeginWheelSetup();
-        Step = 0;
+        if (Step != 0 || !Open || digital == DigitalSteering)
+            return;
+        bindings.RestoreDraftCheckpoint(steeringCheckpoint);
+        DigitalSteering = digital;
+        steeringRight = false;
         StartCapture(now);
     }
 
     private void StartCapture(double now)
     {
         stepCheckpoint = bindings.SaveDraftCheckpoint();
-        if (Step == 0)
+        if (Step == 0 && !steeringRight)
         {
             bindings.ClearDraft(Idas3ControlBindings.ActionId.SteerLeft, Idas3ControlBindings.Slot.Controller);
             bindings.ClearDraft(Idas3ControlBindings.ActionId.SteerRight, Idas3ControlBindings.Slot.Controller);
@@ -64,7 +83,7 @@ internal sealed class Idas3SetupSession
         revision = bindings.CaptureRevision;
         Error = null;
         Deadline = now + 6;
-        bindings.BeginCapture(Actions[Step], Idas3ControlBindings.Slot.Controller, now);
+        bindings.BeginSetupCapture(CaptureAction, Step == 0 ? (DigitalSteering ? 2 : 1) : Step >= 3 ? 2 : 0, now);
         bindings.LimitCapture(Deadline);
         State = Stage.Capturing;
     }
@@ -76,7 +95,7 @@ internal sealed class Idas3SetupSession
         if (bindings.CaptureRevision != revision)
         {
             bindings.CancelCapture();
-            if (Step == 0 && !bindings.DeriveSetupSteering())
+            if (Step == 0 && !DigitalSteering && !bindings.DeriveSetupSteering())
             {
                 Error = bindings.LastError;
                 bindings.RestoreDraftCheckpoint(stepCheckpoint);
@@ -107,6 +126,13 @@ internal sealed class Idas3SetupSession
     {
         if (State != Stage.ReviewInput)
             return;
+        if (Step == 0 && DigitalSteering && !steeringRight)
+        {
+            steeringRight = true;
+            StartCapture(now);
+            return;
+        }
+
         if (++Step == Actions.Length)
             State = Stage.Review;
         else
@@ -126,7 +152,7 @@ internal sealed class Idas3SetupSession
     {
         if (checkpoint != null)
             bindings.RestoreDraftCheckpoint(checkpoint);
-        checkpoint = stepCheckpoint = null;
+        checkpoint = stepCheckpoint = steeringCheckpoint = null;
         State = Stage.Closed;
     }
 
@@ -134,9 +160,9 @@ internal sealed class Idas3SetupSession
     // a checkpoint predating that write. The adapter retains remaining drafts.
     internal void RetireCheckpoint()
     {
-        checkpoint = stepCheckpoint = null;
+        checkpoint = stepCheckpoint = steeringCheckpoint = null;
         State = Stage.Closed;
     }
 
-    internal string Detected => bindings.CompactBindingName(Actions[Math.Min(Step, 4)], Idas3ControlBindings.Slot.Controller);
+    internal string Detected => bindings.CompactBindingName(CaptureAction, Idas3ControlBindings.Slot.Controller);
 }

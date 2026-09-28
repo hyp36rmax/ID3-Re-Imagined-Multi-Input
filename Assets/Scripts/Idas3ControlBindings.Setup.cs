@@ -2,6 +2,12 @@ using System;
 
 public sealed partial class Idas3ControlBindings
 {
+    internal void BeginSetupCapture(ActionId action, int inputType, double now)
+    {
+        BeginCapture(action, Slot.Controller, now);
+        setupCaptureType = inputType;
+    }
+
     // Capture rightward movement once, then derive the other half of the same
     // centered axis. Buttons and end-rest pedals cannot become steering pairs.
     internal bool DeriveSetupSteering()
@@ -43,6 +49,8 @@ public sealed partial class Idas3ControlBindings
             }
 
         string source = ShortControlText(assignment.deviceName, 14);
+        if (assignment.runtimePath != null && assignment.runtimePath.StartsWith(KeyboardSourcePrefix, StringComparison.Ordinal))
+            return assignment.binding.controlLabel;
         string control = assignment.binding.controlLabel ?? assignment.binding.controlPath;
         string status = !assignment.assigned || assignment.runtimePath == null || !experimentalControls.ContainsKey(assignment.runtimePath) ? " (reassign)" : "";
         return ShortControlText(control, 18) + " · " + source + (assignment.assigned ? " #" + number : "") + status;

@@ -24,9 +24,26 @@ public sealed partial class Idas3ControlBindings
         "Right",
         "Confirm",
         "Back / Cancel",
-        "Open Options / Pause",
-        "Start (frontend)"
+        "Open Options / Menu",
+        "Start"
     };
+    private static readonly UnityEngine.KeyCode[] RecoveryKeys =
+    {
+        UnityEngine.KeyCode.UpArrow,
+        UnityEngine.KeyCode.DownArrow,
+        UnityEngine.KeyCode.LeftArrow,
+        UnityEngine.KeyCode.RightArrow,
+        UnityEngine.KeyCode.Return,
+        UnityEngine.KeyCode.Backspace,
+        UnityEngine.KeyCode.Escape
+    };
+    internal string CompactMenuKeyboardName(MenuActionId action)
+    {
+        var assignment = experimentalDraft.menuActions[(int)action];
+        string recovery = (int)action < RecoveryKeys.Length ? KeyName(RecoveryKeys[(int)action]) : "Enter (frontend)";
+        return assignment.runtimePath != null && assignment.runtimePath.StartsWith(KeyboardSourcePrefix, StringComparison.Ordinal) ? assignment.binding.controlLabel + " / " + recovery : recovery;
+    }
+
     internal const int MenuActionCount = 8;
     internal const float MenuReleasePoint = .40f;
     private static readonly int[] MenuOutputKeys =
@@ -38,7 +55,8 @@ public sealed partial class Idas3ControlBindings
         13,
         8
     };
-    private readonly Idas3MenuExcursion legacyMenuExcursion = new Idas3MenuExcursion();
+    private bool directionsArmed;
+    private readonly bool[] recoveryArmed = new bool[7];
     private int menuCaptureAction = -1;
     private int menuContext = -1;
     private bool menuWasFocused, menuWasPreview;
@@ -55,14 +73,15 @@ public sealed partial class Idas3ControlBindings
             ClearMenuAssignment((MenuActionId)menuCaptureAction);
     }
 
-    internal bool ExplicitMenuOwnsSample => ExperimentalEnabled || ExplicitMenuControlHeld;
     internal bool ExplicitMenuControlHeld
     {
         get
         {
-            if (MenuEvents != 0) return true;
+            if (MenuEvents != 0)
+                return true;
             for (int i = 0; i < menuAmounts.Length; ++i)
-                if (menuAvailable[i] && menuAmounts[i] >= MenuReleasePoint) return true;
+                if (menuAvailable[i] && menuAmounts[i] >= MenuReleasePoint)
+                    return true;
             return false;
         }
     }
@@ -82,10 +101,10 @@ public sealed partial class Idas3ControlBindings
     }
 
     internal void DisarmMenuNavigation() => ResetMenuNavigation();
-
     private void ResetMenuNavigation()
     {
-        legacyMenuExcursion.Reset();
+        directionsArmed = false;
+        Array.Clear(recoveryArmed, 0, recoveryArmed.Length);
         Array.Clear(menuArmed, 0, menuArmed.Length);
         Array.Clear(menuAmounts, 0, menuAmounts.Length);
         Array.Clear(menuAvailable, 0, menuAvailable.Length);
@@ -105,11 +124,13 @@ public sealed partial class Idas3ControlBindings
 
     internal void BeginMenuCapture(MenuActionId action, double now)
     {
+        setupCaptureType = 0;
         if (!CanCaptureExperimental)
         {
             LastError = "No supported input sample is available. Connect a device before capturing.";
             return;
         }
+
         using (var scope = new ExperimentalScope(this))
             BeginCaptureCore(ActionId.Accelerate, Slot.Controller, now);
         menuCaptureAction = (int)action;
@@ -132,6 +153,14 @@ public sealed partial class Idas3ControlBindings
             LastError = "Menu source unavailable; capture it again.";
             return false;
         }
+
+        if (source.key != UnityEngine.KeyCode.None)
+            for (int i = 0; i < RecoveryKeys.Length; ++i)
+                if ((source.localPath == KeyboardSourcePrefix + (int)RecoveryKeys[i] || i == 4 && source.localPath == KeyboardSourcePrefix + (int)UnityEngine.KeyCode.KeypadEnter) && i != (int)action)
+                {
+                    LastError = "This key is reserved for " + MenuActionNames[i] + " recovery.";
+                    return false;
+                }
 
         for (int i = 0; i < MenuActionCount; ++i)
         {
@@ -244,18 +273,24 @@ public sealed partial class Idas3ControlBindings
         {
             for (int i = 0; i < MenuActionCount; ++i)
             {
-                var assignment = settings.menuActions[i];
-                bool available = assignment.assigned && assignment.runtimePath != null && experimentalControls.ContainsKey(assignment.runtimePath);
-                menuAvailable[i] = available;
-                if (!available)
+                if (context == 0 && i != (int)MenuActionId.Pause)
                 {
-                    menuArmed[i] = false;
+                    menuAvailable[i] = menuArmed[i] = false;
                     menuAmounts[i] = 0;
                     continue;
                 }
 
-                float amount = CalibratedAmount(assignment.binding, experimentalControls[assignment.runtimePath].value);
+                var assignment = settings.menuActions[i];
+                bool assignedAvailable = assignment.assigned && assignment.runtimePath != null && experimentalControls.ContainsKey(assignment.runtimePath);
+                float amount = assignedAvailable ? CalibratedAmount(assignment.binding, experimentalControls[assignment.runtimePath].value) : 0;
+                menuAvailable[i] = assignedAvailable;
                 menuAmounts[i] = amount;
+                if (!assignedAvailable)
+                {
+                    menuArmed[i] = false;
+                    continue;
+                }
+
                 if (amount < MenuReleasePoint && MenuAxisAtRest(settings, assignment))
                     menuArmed[i] = true;
                 else if (amount >= settings.menuActivation && menuArmed[i])
@@ -266,6 +301,38 @@ public sealed partial class Idas3ControlBindings
             }
         }
 
+        // Recovery participates in this dispatcher, never in a parallel raw-key packet.
+        // Its latch is independent of endpoint availability, so reconnecting a held
+        // device cannot borrow an armed recovery key's state.
+        for (int i = 0; i < RecoveryKeys.Length; ++i)
+        {
+            if (context == 0 && i != (int)MenuActionId.Pause)
+                continue;
+            bool held = Held(RecoveryKeys[i]) || i == 4 && Held(UnityEngine.KeyCode.KeypadEnter) || context == 0 && i == (int)MenuActionId.Pause && ActionHeld(ActionId.Pause);
+            if (!held)
+                recoveryArmed[i] = true;
+            else
+            {
+                if (recoveryArmed[i])
+                    MenuEvents |= 1 << i;
+                recoveryArmed[i] = false;
+                menuAmounts[i] = 1;
+            }
+        }
+
+        bool directionsNeutral = true, directionActive = false;
+        for (int i = 0; i < 4; ++i)
+        {
+            directionsNeutral &= menuAmounts[i] < MenuReleasePoint;
+            directionActive |= menuAmounts[i] >= settings.menuActivation;
+        }
+
+        if (directionsNeutral)
+            directionsArmed = true;
+        if (!directionsArmed)
+            MenuEvents &= ~15;
+        if (directionActive)
+            directionsArmed = false;
         // Opposing directions cancel. Diagonals consume both excursions, with vertical priority.
         if (menuAmounts[0] >= settings.menuActivation && menuAmounts[1] >= settings.menuActivation)
             MenuEvents &= ~3;
@@ -291,16 +358,23 @@ public sealed partial class Idas3ControlBindings
     {
         // At entry, the opposite direction of an already-deflected wheel is not neutral.
         // Re-arm a shared axis only when all of its assigned directions are below release.
-        if (assignment.binding.controlButton) return true;
+        if (assignment.binding.controlButton)
+            return true;
+        var binding = assignment.binding;
+        float value = experimentalControls[assignment.runtimePath].value;
+        float extent = value >= binding.controlRest ? binding.controlMax - binding.controlRest : binding.controlRest - binding.controlMin;
+        if (extent > .0001f && Math.Abs(value - binding.controlRest) / extent >= MenuReleasePoint)
+            return false;
         foreach (var other in settings.menuActions)
-            if (other.assigned && other.runtimePath == assignment.runtimePath &&
-                CalibratedAmount(other.binding, experimentalControls[other.runtimePath].value) >= MenuReleasePoint)
+            if (other.assigned && other.runtimePath == assignment.runtimePath && CalibratedAmount(other.binding, experimentalControls[other.runtimePath].value) >= MenuReleasePoint)
                 return false;
         return true;
     }
 
     private void ApplyExplicitMenu(ref Idas3Native.FrameInput frame)
     {
+        frame.key0 = frame.key1 = frame.key2 = frame.key3 = 0;
+        frame.key4 = frame.key5 = frame.key6 = frame.key7 = 0;
         frame.padConnected = experimentalControls.Count > 0 ? 1u : 0u;
         frame.padButtons = frame.leftTrigger = frame.rightTrigger = 0;
         frame.thumbLX = frame.thumbLY = frame.thumbRX = frame.thumbRY = 0;

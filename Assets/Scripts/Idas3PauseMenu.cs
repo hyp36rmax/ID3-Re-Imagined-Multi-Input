@@ -289,9 +289,6 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
     }
     private void OpenBindingChoice(Idas3ControlBindings.ActionId action,Idas3ControlBindings.Slot slot){
         if(bindings==null||BindingInputBlocked)return;
-        if (bindings.ExperimentalDraftEnabled && action==Idas3ControlBindings.ActionId.Pause && slot==Idas3ControlBindings.Slot.Controller) {
-            OpenMenuBindingChoice(Idas3ControlBindings.MenuActionId.Pause); return;
-        }
         menuBindingChoice=-1;captureAction=action;captureSlot=slot;bindingChoiceSelection=0;bindingChoice=true;
     }
     private void ActivateBindingChoice(){
@@ -464,7 +461,7 @@ public sealed partial class Idas3PauseMenu : MonoBehaviour
         float available=right-left-2*padding;
         if(available<=0)return;
         attractPromptStyle.fontSize=Mathf.Clamp(Mathf.RoundToInt(13*scale),10,20);
-        string text="HOLD "+attractControlLabel.ToUpperInvariant()+" FOR OPTIONS";
+        string text="PRESS "+attractControlLabel.ToUpperInvariant()+" FOR OPTIONS";
         var content=new GUIContent(text);
         Vector2 size=attractPromptStyle.CalcSize(content);
         while(size.x>available&&attractPromptStyle.fontSize>6){

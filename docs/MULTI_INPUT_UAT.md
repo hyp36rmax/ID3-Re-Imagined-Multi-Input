@@ -1,3 +1,5 @@
+> Final unified Controls follow-up (2026-09-27): use [UNIFIED_CONTROLS.md](UNIFIED_CONTROLS.md) for the current acceptance checklist. Quick Setup starts immediately; Axis or Buttons / Keys is inside Steering. Driving/Menu/Keyboard groups have no scrolling. Explicit Menu assignments and keyboard recovery now exclusively own menu navigation, with no raw-device or driving fallback. Hardware/rendered acceptance remains pending. Earlier Wheel/Gamepad-choice and automatic-menu instructions below are historical.
+
 # Current acceptance: unified Controls
 
 The owner built/launched 73e87d6 and reported the failures recorded in [Unified Controls](UNIFIED_CONTROLS.md). Use its current rebuild and retest sequence: Launch → Controls → Quick Setup → Save → immediate Test Inputs → wheel Start → wheel Options → POV press/release → simultaneous steering/pedals/shifts in gameplay. The sections below are historical milestones; the separate CONTROLS/WHEEL instructions are superseded.

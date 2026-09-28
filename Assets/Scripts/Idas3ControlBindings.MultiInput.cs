@@ -58,6 +58,7 @@ public sealed partial class Idas3ControlBindings
         internal long generation;
         internal string localPath, name;
         internal Idas3ControllerControl control;
+        internal UnityEngine.KeyCode key;
     }
 
     private ExperimentalValues experimentalCurrent = new ExperimentalValues(), experimentalDraft = new ExperimentalValues();
@@ -268,8 +269,47 @@ public sealed partial class Idas3ControlBindings
             }
         }
 
+        UpdateKeyboardSources();
         PrepareExperimentalEvaluation(experimentalCurrent, current, experimentalCurrentEvaluation);
         PrepareExperimentalEvaluation(experimentalDraft, draft, experimentalDraftEvaluation);
+    }
+
+    private const string KeyboardSourcePrefix = "keyboard/key/";
+    private List<ExperimentalSource> keyboardSources;
+    private void UpdateKeyboardSources()
+    {
+        // Cache paths and control objects; values come from Poll, not another device read.
+        if (keyboardSources == null)
+        {
+            keyboardSources = new List<ExperimentalSource>();
+            foreach (var key in PollKeys)
+            {
+                if ((int)key >= (int)UnityEngine.KeyCode.Mouse0 || key == UnityEngine.KeyCode.Escape)
+                    continue;
+                string path = KeyboardSourcePrefix + (int)key;
+                keyboardSources.Add(new ExperimentalSource
+                {
+                    name = "Keyboard",
+                    localPath = path,
+                    key = key,
+                    control = new Idas3ControllerControl
+                    {
+                        path = path,
+                        label = KeyName(key),
+                        minimum = 0,
+                        maximum = 1,
+                        button = true
+                    }
+                });
+            }
+        }
+
+        foreach (var source in keyboardSources)
+        {
+            source.control.value = Held(source.key) ? 1 : 0;
+            experimentalSources[source.localPath] = source;
+            experimentalControls[source.localPath] = source.control;
+        }
     }
 
     private void PrepareExperimentalEvaluation(ExperimentalValues assignments, Values keyboard, Values target)
@@ -344,6 +384,18 @@ public sealed partial class Idas3ControlBindings
             return false;
         }
 
+        if (source.key != UnityEngine.KeyCode.None)
+        {
+            // Reuse reserved-key and conflict validation without mutating original storage.
+            var candidate = draft.Clone();
+            SetKey(candidate.actions[(int)action], Slot.Primary, source.key);
+            if (!Validate(candidate, out string error))
+            {
+                LastError = error;
+                return false;
+            }
+        }
+
         for (int i = 0; i < 10; ++i)
         {
             var other = experimentalDraft.actions[i];
@@ -404,7 +456,7 @@ public sealed partial class Idas3ControlBindings
     {
         if (string.IsNullOrEmpty(a.binding.controlPath))
             return "Unassigned";
-        bool sameConnection = a.assigned && experimentalFrame != null && experimentalFrame.TryGetEndpoint(a.endpoint, out var endpoint) && endpoint.ConnectionGeneration == a.generation && (endpoint.Status == Idas3EndpointStatus.Ready || endpoint.Status == Idas3EndpointStatus.PartialSample || endpoint.Status == Idas3EndpointStatus.ReadError);
+        bool sameConnection = a.runtimePath != null && a.runtimePath.StartsWith(KeyboardSourcePrefix, StringComparison.Ordinal) && a.assigned || a.assigned && experimentalFrame != null && experimentalFrame.TryGetEndpoint(a.endpoint, out var endpoint) && endpoint.ConnectionGeneration == a.generation && (endpoint.Status == Idas3EndpointStatus.Ready || endpoint.Status == Idas3EndpointStatus.PartialSample || endpoint.Status == Idas3EndpointStatus.ReadError);
         string status = !a.assigned ? " — reassign" : experimentalFrame == null ? " — unavailable" : !sameConnection ? " — reassign" : a.runtimePath == null || !experimentalControls.ContainsKey(a.runtimePath) ? " — unavailable" : a.waitingRelease ? " — release control" : "";
         return a.deviceName + " / " + (a.binding.controlLabel ?? a.binding.controlPath) + status;
     }

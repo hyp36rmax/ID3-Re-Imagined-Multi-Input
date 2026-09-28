@@ -74,6 +74,7 @@ public sealed partial class Idas3ControlBindings
     private ActionId captureAction;
     private Slot captureSlot;
     private double captureDeadline;
+    private int setupCaptureType; // 0: any, 1: axis, 2: digital.
     public Values Current => current?.Clone();
     public Values Draft => draft;
     public string FilePath => file;
@@ -88,16 +89,12 @@ public sealed partial class Idas3ControlBindings
     public string CapturePrompt { get; private set; } = "";
     public string CaptureError { get; private set; }
     public bool SuppressInput => IsCapturing || releaseBlocked;
-    internal bool RawPauseHeld => Held(KeyCode.Escape) || (!menuWasPreview && MenuEvent(MenuActionId.Pause)) ||
-        (ExplicitMenuOwnsSample
-            ? KeyboardHeld(current.actions[(int)ActionId.Pause])
-            : ActionHeld(ActionId.Pause) || (!controllerReleaseBlocked && (pad.buttons & ~reconnectHeldButtons & 0x10) != 0));
-    internal bool RawOnlineHeld => Held(KeyCode.F1) || KeyboardHeld(current.actions[(int)ActionId.Online]) ||
-        (!ExplicitMenuControlHeld && (ActionHeld(ActionId.Online) ||
-        (!ExperimentalEnabled&&!controllerReleaseBlocked&&current.actions[8].pad==PadInput.None&&string.IsNullOrEmpty(current.actions[8].controlPath)&&(pad.buttons&~reconnectHeldButtons&0x20)!=0)));
+    internal bool RawPauseHeld => !menuWasPreview && MenuEvent(MenuActionId.Pause);
+    internal bool RawOnlineHeld => menuContext == 0 && !ExplicitMenuControlHeld &&
+        (Held(KeyCode.F1) || ActionHeld(ActionId.Online));
     public bool PauseHeld => !SuppressInput && RawPauseHeld;
     public bool OnlineHeld => !SuppressInput && RawOnlineHeld;
-    public bool ViewChangeHeld => !SuppressInput && (KeyboardHeld(current.actions[(int)ActionId.Camera]) || (!ExplicitMenuControlHeld && ActionHeld(ActionId.Camera)));
+    public bool ViewChangeHeld => !SuppressInput && menuContext == 0 && !ExplicitMenuControlHeld && ActionHeld(ActionId.Camera);
     public event System.Action Changed;
 
     public static Values Defaults()
@@ -324,6 +321,7 @@ public sealed partial class Idas3ControlBindings
     }
     public void BeginCapture(ActionId action, Slot slot, double now) {
         menuCaptureAction = -1;
+        setupCaptureType = 0;
         if(ExperimentalDraftEnabled&&slot==Slot.Controller){using(var scope=new ExperimentalScope(this))BeginCaptureCore(action,slot,now);}
         else BeginCaptureCore(action,slot,now);
     }
@@ -414,67 +412,13 @@ public sealed partial class Idas3ControlBindings
             return;
             }
 
-    internal void ApplyMenu(ref Idas3Native.FrameInput frame, bool genericDevice, bool preserveHeldEdges=false){
-        if (ExplicitMenuOwnsSample)
-        {
-            // Explicit excursions own this packet. Do not also emit legacy
-            // aliases from the same physical button, POV, or steering axis.
-            legacyMenuExcursion.Reset();
-            ApplyExplicitMenu(ref frame);
-        }
-        else { ApplyMenuCore(ref frame,genericDevice,preserveHeldEdges,current); GateLegacyMenuDirections(ref frame); }
+    // The unified module owns every menu packet, regardless of driving profile.
+    // Raw pad and driving aliases never enter native or managed menu dispatch.
+    internal void ApplyMenu(ref Idas3Native.FrameInput frame, bool genericDevice, bool preserveHeldEdges = false)
+    {
+        ApplyExplicitMenu(ref frame);
     }
 
-    private void ApplyMenuCore(ref Idas3Native.FrameInput frame,bool genericDevice,bool preserveHeldEdges,Values menuValues)
-    {
-        frame.padButtons&=~(uint)reconnectHeldButtons;
-        if(controllerReleaseBlocked&&!(preserveHeldEdges&&SuppressInput)){frame.padButtons=0;frame.leftTrigger=frame.rightTrigger=0;frame.thumbLX=frame.thumbLY=frame.thumbRX=frame.thumbRY=0;}
-        if (!(preserveHeldEdges && SuppressInput)) GuardLegacyAxes(ref frame);
-        if(SuppressInput&&!preserveHeldEdges)return;
-        bool MenuAction(ActionId action)=>keyboardActions[(int)action]||
-            (preserveHeldEdges&&SuppressInput?DigitalRaw(menuValues.actions[(int)action]):Digital(menuValues.actions[(int)action]));
-        // The host neutralizes blocked packets after retaining menu edges.
-        // Populate held actions even during capture so cancelling cannot turn
-        // an already-held pedal/button into a fresh menu confirmation.
-        // Wheels/HID devices use their saved pedal/steering/paddle bindings
-        // in every menu too. Standard pads retain their D-pad, stick and A/B.
-        if(genericDevice){
-            // A generic stick axis may be bound to a pedal. Navigation must
-            // use the configured actions, not also interpret that axis as a
-            // raw gamepad stick (especially while holding Back).
-            frame.thumbLX=frame.thumbLY=0;
-            if(MenuAction(ActionId.Accelerate)){frame.SetKey(13);frame.padButtons&=~0x2000u;}
-            if(MenuAction(ActionId.Brake)){
-                // Native course menus consume B; managed overlays consume B
-                // or Backspace. Cancel wins if both pedals are held, including
-                // devices whose generic first-button fallback would emit A.
-                ClearKey(ref frame,13);frame.SetKey(8);frame.padButtons=(frame.padButtons&~0x1000u)|0x2000u;
-            }
-            if(MenuAction(ActionId.SteerLeft))frame.SetKey(37);
-            if(MenuAction(ActionId.SteerRight))frame.SetKey(39);
-            if(MenuAction(ActionId.ShiftUp))frame.SetKey(38);
-            if(MenuAction(ActionId.ShiftDown))frame.SetKey(40);
-            if(MenuAction(ActionId.Camera))frame.SetKey(67);
-        }
-    }
-    private void GateLegacyMenuDirections(ref Idas3Native.FrameInput frame)
-    {
-        uint keys = frame.key1;
-        bool Key(int key) => (keys & (1u << (key & 31))) != 0;
-        int directions = (Key(38) || (frame.padButtons & 1) != 0 || frame.thumbLY > 16000 ? 1 : 0)
-            | (Key(40) || (frame.padButtons & 2) != 0 || frame.thumbLY < -16000 ? 2 : 0)
-            | (Key(37) || (frame.padButtons & 4) != 0 || frame.thumbLX < -16000 ? 4 : 0)
-            | (Key(39) || (frame.padButtons & 8) != 0 || frame.thumbLX > 16000 ? 8 : 0);
-        int pulse = legacyMenuExcursion.Evaluate(directions);
-        frame.padButtons &= ~15u;
-        frame.thumbLX = frame.thumbLY = 0;
-        int[] output = MenuOutputKeys;
-        for (int i = 0; i < 4; ++i)
-        {
-            ClearKey(ref frame, output[i]);
-            if ((pulse & (1 << i)) != 0) frame.SetKey(output[i]);
-        }
-    }
     // Preview and gameplay use the same evaluator and physical snapshot. Preview
     // does not call Poll again or neutralize the gameplay packet.
     internal Idas3Native.FrameInput EvaluateDraftDriving() {
@@ -498,6 +442,8 @@ public sealed partial class Idas3ControlBindings
         {
             var binding = values.actions[i];
             ClearBoundShortcut(ref frame, binding.key1); ClearBoundShortcut(ref frame, binding.key2); ClearBoundShortcut(ref frame, binding.key3);
+            if (binding.controlPath != null && experimentalSources.TryGetValue(binding.controlPath, out var source) && source.key != UnityEngine.KeyCode.None)
+                ClearBoundShortcut(ref frame, source.key);
         }
         frame.padConnected = pad.connected||controls.Count>0 ? 1u : 0u;
         frame.padButtons = pad.connected&&!controllerReleaseBlocked ? (uint)pad.buttons & ~0xE01Fu & ~(uint)reconnectHeldButtons : 0u; // Pause is routed by the host.
@@ -623,7 +569,9 @@ public sealed partial class Idas3ControlBindings
         Idas3ControllerControl best=null;direction=0;rest=0;float score=.20f;int candidates=0;
         foreach(var pair in controls)
         {
-            var control=pair.Value;if(captureHeldButtons.Contains(pair.Key)||!restValues.TryGetValue(pair.Key,out float baseline))continue;
+            var control=pair.Value;
+            if (setupCaptureType == 1 && control.button || setupCaptureType == 2 && !control.button) continue;
+            if(captureHeldButtons.Contains(pair.Key)||!restValues.TryGetValue(pair.Key,out float baseline))continue;
             float delta=control.value-baseline;
             float amount=control.button?(control.value>.5f?2:0):Math.Abs(delta)/(control.maximum-control.minimum);
             if(amount>.20f)++candidates;
@@ -784,7 +732,6 @@ public sealed partial class Idas3ControlBindings
     public string BindingName(ActionId action, Slot slot, bool draft = true)
     {
         if (slot==Slot.Controller && (draft?ExperimentalDraftEnabled:ExperimentalEnabled)) {
-            if (action==ActionId.Pause) return "Menu: " + MenuBindingName(MenuActionId.Pause,draft);
             return ExperimentalBindingName(action,draft);
         }
         EnsureInitialized(); CheckAction(action); CheckSlot(slot); var binding = (draft ? this.draft : current).actions[(int)action];

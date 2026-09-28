@@ -17,7 +17,7 @@ internal sealed class Idas3ControlsSetupView
     internal readonly Idas3SetupSession Setup;
     internal int Page { get; private set; } = 1;
 
-    private bool menuBindings;
+    private int bindingGroup;
     private int keyboardSlot, focus = 1;
     private readonly System.Collections.Generic.List<Action> actions = new System.Collections.Generic.List<Action>();
     private GUIStyle text, heading, button, secondary;
@@ -43,7 +43,7 @@ internal sealed class Idas3ControlsSetupView
         scroll = Vector2.zero;
         services.Bindings.DisarmMenuNavigation();
         if (Page == 0)
-            Setup.OpenChoice();
+            Setup.Begin(Time.realtimeSinceStartupAsDouble);
         if (Page == 4)
             services.Feedback?.RefreshDevices();
     }
@@ -52,10 +52,6 @@ internal sealed class Idas3ControlsSetupView
     {
         if (actions.Count > 0)
             focus = (focus + Math.Sign(direction) + actions.Count) % actions.Count;
-        if (Page == 2 && !menuBindings && focus >= 8 && focus < 28)
-            scroll.y = Mathf.Clamp(((focus - 8) / 2) * 36 - 90, 0, 133);
-        if (Page == 2 && menuBindings && focus >= 7 && focus < 15)
-            scroll.y = Mathf.Clamp((focus - 7) * 36 - 90, 0, 68);
     }
 
     internal void Activate()
@@ -105,11 +101,11 @@ internal sealed class Idas3ControlsSetupView
         };
         secondary = new GUIStyle(text)
         {
-            fontSize = 13
+            fontSize = 16
         };
         button = new GUIStyle(GUI.skin.label)
         {
-            fontSize = 14,
+            fontSize = 17,
             alignment = TextAnchor.MiddleCenter,
             wordWrap = false,
             clipping = TextClipping.Clip
@@ -131,14 +127,14 @@ internal sealed class Idas3ControlsSetupView
         GUI.color = old;
     }
 
-    private void Button(float x, float y, float width, string label, Action action, bool enabled = true, bool selected = false)
+    private void Button(float x, float y, float width, string label, Action action, bool enabled = true, bool selected = false, float height = 32)
     {
         int index = actions.Count;
         if (enabled)
             actions.Add(action);
-        var rect = new Rect(x, y, width, 32);
+        var rect = new Rect(x, y, width, height);
         Fill(rect, selected || enabled && focus == index ? new Color32(222, 35, 49, 255) : new Color32(61, 64, 73, 255));
-        Fill(new Rect(x + 1, y + 1, width - 2, 30), new Color32(32, 35, 42, 255));
+        Fill(new Rect(x + 1, y + 1, width - 2, height - 2), new Color32(32, 35, 42, 255));
         bool old = GUI.enabled;
         GUI.enabled = old && enabled;
         if (GUI.Button(rect, label, button))
@@ -146,6 +142,7 @@ internal sealed class Idas3ControlsSetupView
             focus = index;
             action();
         }
+
         GUI.enabled = old;
     }
 
@@ -184,14 +181,7 @@ internal sealed class Idas3ControlsSetupView
     private void DrawSetup()
     {
         var state = Setup.State;
-        if (state == Idas3SetupSession.Stage.Choose)
-        {
-            Label(300, 220, 660, 45, "What are you setting up?", heading);
-            Button(300, 300, 310, "WHEEL + PEDALS", () => Setup.Begin(false, Time.realtimeSinceStartupAsDouble), services.Bindings.CanCaptureExperimental);
-            Button(630, 300, 310, "GAMEPAD", () => Setup.Begin(true, Time.realtimeSinceStartupAsDouble), services.Bindings.CanCaptureExperimental);
-            Label(300, 350, 660, 60, services.Bindings.CanCaptureExperimental ? "Rest the controls before selecting. Your saved setup is kept until you save." : "Connect a supported controller. Keyboard bindings are available in Bindings.");
-        }
-        else if (state == Idas3SetupSession.Stage.Review)
+        if (state == Idas3SetupSession.Stage.Review)
         {
             Label(300, 218, 660, 35, "Review your setup", heading);
             var ids = new[]
@@ -210,19 +200,34 @@ internal sealed class Idas3ControlsSetupView
                 "Shift Up",
                 "Shift Down"
             };
-            for (int i = 0; i < ids.Length; ++i)
-                Label(300, 270 + i * 40, 680, 36, names[i] + ": " + services.Bindings.CompactBindingName(ids[i], Idas3ControlBindings.Slot.Controller));
+            if (Setup.DigitalSteering)
+            {
+                Label(300, 265, 680, 28, "Steering Left: " + services.Bindings.CompactBindingName(Idas3ControlBindings.ActionId.SteerLeft, Idas3ControlBindings.Slot.Controller));
+                Label(300, 294, 680, 28, "Steering Right: " + services.Bindings.CompactBindingName(Idas3ControlBindings.ActionId.SteerRight, Idas3ControlBindings.Slot.Controller));
+            }
+            else
+                Label(300, 270, 680, 36, "Steering: " + services.Bindings.CompactBindingName(ids[0], Idas3ControlBindings.Slot.Controller));
+            for (int i = 1; i < ids.Length; ++i)
+                Label(300, 290 + i * 38, 680, 36, names[i] + ": " + services.Bindings.CompactBindingName(ids[i], Idas3ControlBindings.Slot.Controller));
             Button(300, 495, 300, "SAVE", services.Save);
         }
         else
         {
-            Label(300, 215, 660, 30, (Setup.Step + 1) + " / 5", secondary);
-            Label(300, 260, 660, 65, Setup.Instruction, heading);
+            Label(300, 215, 660, 30, (Setup.Step + 1) + " / 5 · " + new[] { "Steering", "Gas", "Brake", "Shift Up", "Shift Down" }[Setup.Step], secondary);
+            if (Setup.Step == 0)
+            {
+                Button(300, 252, 310, "Axis", () => Setup.SelectSteeringType(false, Time.realtimeSinceStartupAsDouble), true, !Setup.DigitalSteering);
+                Button(630, 252, 310, "Buttons / Keys", () => Setup.SelectSteeringType(true, Time.realtimeSinceStartupAsDouble), true, Setup.DigitalSteering);
+            }
+
+            Label(300, 290, 660, 42, Setup.Instruction, heading);
+            if (Setup.Step == 0 && !Setup.DigitalSteering)
+                Label(300, 330, 660, 28, "Rest at center first, then move right.", secondary);
             if (state == Idas3SetupSession.Stage.Capturing)
-                Label(300, 340, 660, 60, Math.Max(0, Math.Ceiling(Setup.Deadline - Time.realtimeSinceStartupAsDouble)) + " seconds remaining\n" + services.Bindings.CaptureError);
+                Label(300, 366, 660, 60, Math.Max(0, Math.Ceiling(Setup.Deadline - Time.realtimeSinceStartupAsDouble)) + " seconds remaining\n" + services.Bindings.CaptureError);
             else if (state == Idas3SetupSession.Stage.ReviewInput)
             {
-                Label(300, 340, 660, 65, Setup.Detected);
+                Label(300, 366, 660, 60, Setup.Detected);
                 // Pointer confirmation is deliberate; hardware capture is not a click.
                 Button(300, 430, 310, "CONFIRM", () =>
                 {
@@ -233,7 +238,7 @@ internal sealed class Idas3ControlsSetupView
             }
             else
             {
-                Label(300, 340, 660, 65, Setup.Error);
+                Label(300, 366, 660, 60, Setup.Error);
                 Button(300, 430, 640, "RETRY", () => Setup.Retry(Time.realtimeSinceStartupAsDouble));
             }
 
@@ -283,53 +288,78 @@ internal sealed class Idas3ControlsSetupView
     private static bool ShowDevice(Idas3EndpointSnapshot endpoint) => endpoint.Status != Idas3EndpointStatus.Disconnected && endpoint.Status != Idas3EndpointStatus.Disposed && endpoint.Status != Idas3EndpointStatus.SuppressedMirror;
     private void DrawBindings()
     {
-        Button(282, 230, 345, "DRIVING", () =>
+        string[] groups =
         {
-            menuBindings = false;
-            focus = 5;
-            scroll = Vector2.zero;
-        });
-        Button(641, 230, 345, "MENU", () =>
+            "DRIVING",
+            "MENU",
+            "KEYBOARD"
+        };
+        for (int i = 0; i < groups.Length; ++i)
         {
-            menuBindings = true;
-            focus = 6;
-            scroll = Vector2.zero;
-        });
+            int group = i;
+            Button(282 + i * 238, 230, 228, groups[i], () =>
+            {
+                bindingGroup = group;
+                focus = 7;
+            }, true, bindingGroup == group);
+        }
+
         var bindings = services.Bindings;
-        if (menuBindings)
+        // All rows live in the fixed content panel. No binding group scrolls.
+        if (bindingGroup == 1)
         {
-            scroll = GUI.BeginScrollView(new Rect(280, 269, 714, 220), scroll, new Rect(0, 0, 688, 288));
             for (int i = 0; i < Idas3ControlBindings.MenuActionCount; ++i)
             {
                 var action = (Idas3ControlBindings.MenuActionId)i;
-                Label(4, 4 + i * 36, 205, 29, Idas3ControlBindings.MenuActionNames[i], secondary);
-                Button(211, i * 36, 474, bindings.CompactMenuBindingName(action), () => services.RebindMenu(action));
+                float y = 274 + i * 28;
+                Label(286, y + 2, 240, 26, Idas3ControlBindings.MenuActionNames[i], secondary);
+                Button(532, y, 450, bindings.CompactMenuBindingName(action), () => services.RebindMenu(action), height: 26);
             }
 
-            GUI.EndScrollView();
-            Button(282, 501, 704, "AXIS ACTIVATION: " + Mathf.RoundToInt(bindings.MenuActivationPoint * 100) + "%", () => bindings.SetMenuActivation(bindings.MenuActivationPoint >= .95f ? .45f : bindings.MenuActivationPoint + .05f));
+            Button(282, 505, 704, "AXIS ACTIVATION: " + Mathf.RoundToInt(bindings.MenuActivationPoint * 100) + "%", () => bindings.SetMenuActivation(bindings.MenuActivationPoint >= .95f ? .45f : bindings.MenuActivationPoint + .05f));
+            return;
         }
-        else
+
+        if (bindingGroup == 2)
         {
-            Button(282, 268, 340, "KEYBOARD SLOT " + (keyboardSlot + 1) + "  ›", () => keyboardSlot = (keyboardSlot + 1) % 3);
-            Label(640, 273, 345, 28, "Controller input", secondary);
-            scroll = GUI.BeginScrollView(new Rect(280, 307, 714, 227), scroll, new Rect(0, 0, 688, 360));
-            for (int i = 0; i < 10; ++i)
-            {
-                var action = (Idas3ControlBindings.ActionId)i;
-                Label(4, i * 36 + 4, 155, 30, Idas3ControlBindings.ActionName(action), secondary);
-                Button(160, i * 36, 130, bindings.CompactBindingName(action, (Idas3ControlBindings.Slot)keyboardSlot), () => services.Rebind(action, (Idas3ControlBindings.Slot)keyboardSlot));
-                Button(298, i * 36, 385, ControllerAssignment(action), () => services.Rebind(action, Idas3ControlBindings.Slot.Controller));
-            }
-
-            GUI.EndScrollView();
+            Button(282, 270, 345, "KEYBOARD SLOT " + (keyboardSlot + 1) + "  ›", () => keyboardSlot = (keyboardSlot + 1) % 3, height: 26);
+            Label(641, 270, 345, 26, "Menu / recovery keys", secondary);
         }
+
+        for (int i = 0; i < 10; ++i)
+        {
+            var action = (Idas3ControlBindings.ActionId)i;
+            float y = (bindingGroup == 2 ? 304 : 272) + i * 23;
+            Label(286, y, bindingGroup == 2 ? 140 : 240, 23, DrivingName(action), secondary);
+            if (bindingGroup == 2)
+                Button(432, y, 195, bindings.CompactBindingName(action, (Idas3ControlBindings.Slot)keyboardSlot), () => services.Rebind(action, (Idas3ControlBindings.Slot)keyboardSlot), height: 22);
+            else
+                Button(532, y, 450, ControllerAssignment(action), () => services.Rebind(action, Idas3ControlBindings.Slot.Controller), height: 22);
+        }
+
+        if (bindingGroup == 2)
+            for (int i = 0; i < Idas3ControlBindings.MenuActionCount; ++i)
+            {
+                var action = (Idas3ControlBindings.MenuActionId)i;
+                float y = 304 + i * 28;
+                Label(641, y, 145, 28, (action == Idas3ControlBindings.MenuActionId.Pause ? "Open Options" : Idas3ControlBindings.MenuActionNames[i]), secondary);
+                Button(788, y, 194, bindings.CompactMenuKeyboardName(action), () => services.RebindMenu(action), height: 26);
+            }
+    }
+
+    private static string DrivingName(Idas3ControlBindings.ActionId action)
+    {
+        if (action == Idas3ControlBindings.ActionId.Accelerate)
+            return "Gas";
+        if (action == Idas3ControlBindings.ActionId.Headlights)
+            return "Headlights";
+        return Idas3ControlBindings.ActionName(action);
     }
 
     private string ControllerAssignment(Idas3ControlBindings.ActionId action)
     {
         string assignment = services.Bindings.CompactBindingName(action, Idas3ControlBindings.Slot.Controller);
-        return services.Bindings.ExperimentalDraftEnabled ? assignment : assignment + " · " + Idas3ControlBindings.ShortControlText(services.Devices.ActiveName, 14);
+        return Idas3ControlBindings.ShortControlText(services.Bindings.ExperimentalDraftEnabled ? assignment : assignment + " · " + Idas3ControlBindings.ShortControlText(services.Devices.ActiveName, 14), 48);
     }
 
     private static bool Key(Idas3Native.FrameInput frame, int key)
@@ -349,7 +379,7 @@ internal sealed class Idas3ControlsSetupView
         Bar(400, "Brake", sampleAvailable ? (Key(sample, 83) ? 1 : sample.leftTrigger / 255f) : 0, false);
         Label(286, 464, 340, 35, "Shift Up: " + (sampleAvailable && held[4] ? "ON" : "OFF"));
         Label(640, 464, 340, 35, "Shift Down: " + (sampleAvailable && held[5] ? "ON" : "OFF"));
-        Label(286, 510, 695, 28, "Assigned input before native response. Use the pointer or keyboard Escape to leave.", secondary);
+        Label(286, 503, 695, 39, "Assigned input before native response. Pointer / Escape to leave.", secondary);
     }
 
     private void Bar(float y, string name, float amount, bool centered)

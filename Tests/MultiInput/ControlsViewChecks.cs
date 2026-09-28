@@ -76,6 +76,8 @@ internal static class ControlsViewChecks
         {
             GUI.Click = click;
             GUI.Labels.Clear();
+            GUI.Drawn.Clear();
+            GUI.ScrollCalls = 0;
             view.Draw();
         }
 
@@ -84,7 +86,7 @@ internal static class ControlsViewChecks
         Check(!GUI.Labels.Exists(s => s != null && (s.Contains("Draft") || s.Contains("Input: Multi"))), "normal Devices labels omit internal modes");
         Draw("Quick Setup");
         Draw();
-        Check(view.Setup.State == Idas3SetupSession.Stage.Choose, "Quick Setup enters choice immediately without Start screen");
+        Check(view.Setup.State == Idas3SetupSession.Stage.Capturing, "Quick Setup starts axis capture immediately without device choice");
         Draw("CANCEL SETUP");
         Check(!view.Setup.Open && view.Page == 1, "visible cancel leaves wizard");
         Draw("Test Inputs");
@@ -106,6 +108,38 @@ internal static class ControlsViewChecks
         view.Navigate(1);
         view.Activate();
         Check(services.menuAction == Idas3ControlBindings.MenuActionId.Down, "pointer row focus is retained when resuming keyboard navigation");
+        foreach (string group in new[]
+        {
+            "DRIVING",
+            "MENU",
+            "KEYBOARD"
+        }
+
+        )
+        {
+            Draw(group);
+            Draw();
+            Check(GUI.ScrollCalls == 0, group + " has no scroll view");
+            Check(GUI.Drawn.Exists(item => item.label == "SAVE CHANGES") && GUI.Drawn.Exists(item => item.label == "BACK"), group + " keeps footer visible");
+            foreach (var size in new[]
+            {
+                (1280f, 720f),
+                (862f, 569f)
+            }
+
+            )
+            {
+                float scale = Math.Min(1.5f, Math.Min(size.Item1 / 1072, size.Item2 / 704));
+                Check(GUI.Drawn.TrueForAll(item => item.rect.x >= 0 && item.rect.x + item.rect.width <= 1040 && item.rect.y + item.rect.height <= 680), group + " bounds fit the game's logical panel");
+                Check(GUI.Drawn.TrueForAll(item => item.font * scale >= 12.8f), group + " text remains at least 12.8 px at full game window " + size);
+            }
+
+            int rows = GUI.Labels.FindAll(label => label == "Gas" || label == "Brake" || label == "Steer left" || label == "Steer right" || label == "Shift up" || label == "Shift down" || label == "Change camera" || label == "Pause" || label == "Online menu" || label == "Headlights").Count;
+            Check(rows == (group == "MENU" ? 0 : 10), group + " contains every driving action when appropriate");
+            int menus = GUI.Labels.FindAll(label => Array.IndexOf(Idas3ControlBindings.MenuActionNames, label) >= 0 || label == "Open Options").Count;
+            Check(menus == (group == "DRIVING" ? 0 : 8), group + " contains every menu action when appropriate");
+        }
+
         view.Select(4);
         Draw();
         Check(GUI.Labels.Contains("Force-output device"), "FFB selector names output ownership");

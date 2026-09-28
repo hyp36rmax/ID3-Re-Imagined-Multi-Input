@@ -1,3 +1,5 @@
+> Current follow-up: Quick Setup begins Steering immediately, then Gas, Brake and shifts. The steering type toggle is inside that step. Explicit Menu bindings are now required for controller navigation; recovery keys remain available. See [UNIFIED_CONTROLS.md](UNIFIED_CONTROLS.md) for the complete current flow and Windows retest. No new corrected Windows build is claimed by this source-only review.
+
 # Windows multi-input development sample
 
 The owner built and launched baseline commit `73e87d617a467776803c9ff59d6754ff78fa829d` on Windows and reported native-test and ZIP-integrity success. Hardware UAT then exposed menu/setup failures. The unified Controls correction is described in [UNIFIED_CONTROLS.md](UNIFIED_CONTROLS.md); its Windows build and hardware acceptance are pending.
@@ -6,7 +8,7 @@ The owner built and launched baseline commit `73e87d617a467776803c9ff59d6754ff78
 
 1. Extract the entire `ID3-MultiInput-<commit>.zip` into a new folder, separate from the installed game. Keep its README and build reports with the exact commit.
 2. Supply your own supported GDS-0033 dump beside the EXE: `rom/gds-0033.chd`, or `rom/gds-0033.cue` plus `rom/gds-0033-track1.bin`, `rom/gds-0033-track2.bin`, and `rom/gds-0033-track3.bin`. The ROM gate validates it. Run `InitialDUnity.exe`. Separate settings/saves use `%USERPROFILE%\AppData\LocalLow\Chris\Initial D Multi Input Sample`; release updates and community uploads are disabled. Use offline play.
-3. Open Controls → Quick Setup. Choose Wheel or Gamepad, rest controls, then follow each six-second capture. Turn right for steering; the other direction is derived. Confirm each detected input. Retry starts another window; Cancel restores prior settings. Shifts may retain existing assignments.
+3. Open Controls → Quick Setup. Rest controls and follow each six-second capture. Steering defaults to Axis: turn right once and the other direction is derived. Buttons / Keys instead captures Left then Right within Steering. Confirm each detected input. Retry starts another window; Cancel restores prior settings. Shifts may retain existing assignments.
 4. Review and Save. Test Inputs opens live immediately. Test wheel/stick, gas, brake and shifts together. The page consumes those inputs; leave with the pointer or keyboard Escape.
 5. Bind distinct Start, Open Options / Pause, and desired navigation in Bindings → Menu. Save Changes, return to the title, release controls and test Start/Options/POV. Keyboard recovery remains available. Do a short offline drive only after checking assignments.
 

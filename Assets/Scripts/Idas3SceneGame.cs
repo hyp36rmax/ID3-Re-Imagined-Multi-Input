@@ -75,9 +75,9 @@ public sealed class Idas3SceneGame : MonoBehaviour
     private bool Focused => diagnosticFocusOverride ?? Application.isFocused;
     private bool OnlineRace => multiplayer != null && multiplayer.IsRacing;
     private bool CanOpenPause => ready && (Status.flags & (1u | 32u | 512u | 1024u | 4096u)) == 0 && Status.racePhase < 3;
-    private bool AttractScreen => ready && (Status.flags & (1u | 32u | 512u | 1024u | 4096u)) == 1u &&
-        Status.frontendStage == 0 && !OnlineRace && !multiplayer.ChallengerPending;
-    private bool AttractOptionsAllowed => AttractScreen && !pauseMenu.IsOpen && !multiplayerMenu.IsOpen && !raceMusicMenu.IsOpen;
+    private bool FrontendOptionsContext => ready && (Status.flags & (1u | 32u | 512u | 1024u | 4096u)) == 1u &&
+        !OnlineRace && !multiplayer.ChallengerPending;
+    private bool AttractOptionsAllowed => FrontendOptionsContext && !pauseMenu.IsOpen && !multiplayerMenu.IsOpen && !raceMusicMenu.IsOpen;
     private static Idas3SceneGame instance;
     private Camera outputCamera;
     private int windowedWidth = 1280, windowedHeight = 720;
@@ -366,11 +366,6 @@ public sealed class Idas3SceneGame : MonoBehaviour
             {
                 for (int i = 0; i < keys.Length; ++i)
                     if (keys[i] != KeyCode.F1 && Input.GetKey(keys[i])) frame.SetKey(virtualKeys[i]);
-                // Managed menus hit-test the pointer themselves. Translating
-                // their click to Enter activates the controller selection first.
-                Idas3MenuPointer.ApplyConfirm(ref frame,Input.GetKey(KeyCode.KeypadEnter),Input.GetMouseButton(0),
-                    !networkRoom&&!pauseMenu.IsOpen&&!multiplayerMenu.BlocksGameInput&&!raceMusicMenu.BlocksGameInput&&
-                    !saveMenuOwnsPointer&&!savePointerReleaseBlocked);
                 controllerDevices.TryRead(out physicalPad);
             }
             Func<KeyCode,bool> physicalKey = Focused ? Input.GetKey : NoKeyHeld;
@@ -414,13 +409,17 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 pauseMenu.SetOpen(false);
                 preservePauseOnClose = false;
             }
-            // The native menus retain their established navigation. Only the
-            // driving packet is translated; original steering conditioning
-            // and simulation code receive the same analog ranges as before.
+            // Driving evaluation remains unchanged. Every menu packet is canonical:
+            // explicit assignments and recovery keys, with no raw driving aliases.
             bool drivingBindings = (Status.flags & (1u | 32u | 512u | 1024u | 4096u)) == 0 && Status.racePhase < 3;
-            if (drivingBindings && !pauseMenu.IsOpen && !multiplayerMenu.BlocksGameInput)
+            if (drivingBindings && !pauseMenu.IsOpen && !multiplayerMenu.BlocksGameInput && !raceMusicMenu.IsOpen)
                 controlBindings.ApplyDriving(ref frame);
             else controlBindings.ApplyMenu(ref frame,controllerDevices.ActiveIsGeneric,true);
+            // The native frontend still owns its pointer clicks. Recovery Keypad
+            // Enter was already canonicalized; do not dispatch it a second time.
+            if (Focused && !bindingInputBlocked && controlBindings.MenuEvents == 0 && wheelMenuContext >= 100)
+                Idas3MenuPointer.ApplyConfirm(ref frame, false, Input.GetMouseButtonDown(0),
+                    !networkRoom && !saveMenuOwnsPointer && !savePointerReleaseBlocked);
             if (!Idas3SceneSmoke.PrepareFrame(ref frame)) return;
             if (!Idas3MultiplayerSmoke.PrepareFrame(ref frame)) return;
             if (!Idas3PauseSmoke.PrepareFrame(ref frame)) return;
@@ -451,7 +450,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 // Captured hardware cannot also confirm or skip a wizard step.
                 // Keyboard recovery and pointer buttons are separate explicit UI actions.
                 if(Focused && Input.GetKeyDown(KeyCode.Escape)) pauseMenu.Back();
-                else if(Focused && !controlBindings.IsCapturing){
+                else if(Focused && !controlBindings.SuppressInput){
                     if(Input.GetKeyDown(KeyCode.Return)) pauseMenu.Activate();
                     if(Input.GetKeyDown(KeyCode.Tab)) pauseMenu.Navigate(1);
                 }
@@ -498,7 +497,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             UpdateWheelFeedback();
             if (!OnlineRace && !challenger.Active && CanOpenPause && (Status.flags & 2u) != 0 && !pauseMenu.IsOpen && !multiplayerMenu.IsOpen)
                 pauseMenu.SetOpen(true);
-            if (pauseMenu.IsOpen && !CanOpenPause && !OnlineRace && !(pauseMenu.AttractOptions && AttractScreen))
+            if (pauseMenu.IsOpen && !CanOpenPause && !OnlineRace && !(pauseMenu.AttractOptions && FrontendOptionsContext))
             {
                 preservePauseOnClose = true;
                 pauseMenu.SetOpen(false);
@@ -700,7 +699,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
         (raw.padButtons & 0xf010u) != 0 || Input.GetMouseButton(0) || Input.GetKey(KeyCode.P);
     private bool UpdateRaceMusic(ref Idas3Native.FrameInput frame, bool bindingBlocked)
     {
-        raceMusicMenu.WheelNavigation=controllerDevices.ActiveIsGeneric;
+        raceMusicMenu.WheelNavigation=false;
         raceMusicMenu.Busy=CustomMusic.Busy;
         if(raceMusicMenu.Preview!=null){var values=gameOptions.Current;raceMusicMenu.Preview.GameGain=values.muteWhenUnfocused&&!Focused?0:values.masterVolume*values.musicVolume;}
         raceMusic.Refresh();
@@ -753,7 +752,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 double now = Time.realtimeSinceStartupAsDouble;
                 if (axis != 0 && (axis != musicNavigationAxis || now >= nextMusicNavigation))
                 {
-                    raceMusicMenu.NavigateDevice(horizontal,vertical,controllerDevices.ActiveIsGeneric);
+                    raceMusicMenu.NavigateDevice(horizontal,vertical,false);
                     nextMusicNavigation = now + (axis != musicNavigationAxis ? .30 : .10);
                 }
                 musicNavigationAxis = axis;
@@ -778,7 +777,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     {
         bool visible = AttractOptionsAllowed;
         pauseMenu.SetAttractPrompt(visible,
-            Mathf.Clamp01(attractOptionsHoldSeconds / .65f), visible ? ViewChangeHint() : "VIEW CHANGE");
+            0, "ESC / OPEN OPTIONS");
     }
     private bool UpdateAttractOptions(ref Idas3Native.FrameInput frame, bool inputBlocked)
     {
@@ -805,19 +804,6 @@ public sealed class Idas3SceneGame : MonoBehaviour
             pauseMenu.OpenAttractOptions();
             return true;
         }
-        if (controlBindings.ViewChangeHeld)
-        {
-            if (attractOptionsHoldSeconds == 0) attractViewTapChild = Status.attractChild;
-            attractOptionsHoldSeconds += Math.Min(Time.unscaledDeltaTime, .1f);
-            if (attractOptionsHoldSeconds >= .65f) pauseMenu.OpenAttractOptions();
-            return true;
-        }
-        // Original ranking pages use View Change taps. Defer that edge until
-        // release so a long hold never changes a page or confirms Start first.
-        bool startHeld = Held(frame, 13) || (frame.padButtons & 0x1000) != 0;
-        if (attractOptionsHoldSeconds > 0 && !startHeld &&
-            attractViewTapChild == 12 && Status.attractChild == attractViewTapChild)
-            frame.SetKey(67);
         attractOptionsHoldSeconds = 0;
         return false;
     }
@@ -985,7 +971,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 previousMenuInput=raw;NeutralizeControls(ref frame);menuNavigationAxis=0;return;
             }
         }
-        pauseMenu.SetWheelNavigation(!controlBindings.ExperimentalEnabled && controllerDevices.ActiveIsGeneric);
+        pauseMenu.SetWheelNavigation(false);
         bool pressed(int key) => Held(raw, key) && !Held(previousMenuInput, key);
         uint pressedButtons = raw.padButtons & ~previousMenuInput.padButtons;
         // PauseHeld already translates the bound controller control to Escape.
@@ -1003,7 +989,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
                 -(Held(raw,37)||(raw.padButtons&4)!=0||raw.thumbLX < -16000?1:0);
             multiplayerMenu.ProcessMenuNavigation(horizontal,vertical,Held(raw,13)||(raw.padButtons&0x1000)!=0,
                 Held(raw,8)||(raw.padButtons&0x2000)!=0,(raw.flags&1)==0||controlBindings.SuppressInput,
-                Time.realtimeSinceStartupAsDouble,!controlBindings.ExperimentalEnabled && controllerDevices.ActiveIsGeneric);
+                Time.realtimeSinceStartupAsDouble,false);
             NeutralizeControls(ref frame);
         }
         else if ((raw.flags & 1) != 0)

@@ -46,13 +46,13 @@ public static class Idas3ControllerMenuChecks
             var songs=go.AddComponent<Idas3RaceMusicMenu>();songs.Initialize(new[]{new Idas3RaceMusicMenu.Entry{id=1,title="First",stage=1},new Idas3RaceMusicMenu.Entry{id=2,title="Second",stage=2}},1);songs.SetOpen(true);
             songs.NavigateDevice(1,0,true);Check(songs.HighlightedTrackId==2&&songs.StageFilter==0,"Wheel selects songs rather than only changing stage filter");
             songs.NavigateDevice(0,1,true);Check(songs.StageFilter==1,"Optional wheel paddle changes stage");songs.Back();
-            bindings.Poll(k=>false,new Idas3ControlBindings.PadState{connected=true,buttons=0x20},0);Check(bindings.OnlineHeld,"Default Select opens Online");
+            bindings.Poll(k=>false,new Idas3ControlBindings.PadState{connected=true,buttons=0x20},0);bindings.EvaluateMenuNavigation(0,true,false);Check(bindings.OnlineHeld,"Default Select opens Online");
             bindings.BeginEdit();bindings.TrySetDraftPad(Idas3ControlBindings.ActionId.Online,Idas3ControlBindings.PadInput.None);Check(bindings.ApplyDraft(),"Legacy empty Online binding");
-            bindings.Poll(k=>false,new Idas3ControlBindings.PadState{connected=true,buttons=0x20},1);Check(bindings.OnlineHeld,"Existing unbound profile Select fallback");
+            bindings.Poll(k=>false,new Idas3ControlBindings.PadState{connected=true,buttons=0x20},1);Check(!bindings.OnlineHeld,"Unbound Online has no implicit fallback");
             bindings.Poll(k=>false,default,1.5);var neutral=default(Idas3Native.FrameInput);bindings.ApplyMenu(ref neutral,true);
             bindings.Poll(k=>k==KeyCode.W||k==KeyCode.S||k==KeyCode.A||k==KeyCode.Q,default,2);
             var frame=new Idas3Native.FrameInput{thumbLX=22000,thumbLY=22000};bindings.ApplyMenu(ref frame,true);Check(frame.thumbLX==0&&frame.thumbLY==0,"Bound pedal axes do not also navigate as raw sticks");
-            Check((frame.key0&(1u<<13))==0&&(frame.key0&(1u<<8))!=0&&(frame.padButtons&0x2000)!=0&&(frame.key1&(1u<<6))!=0,"Mapped brake reaches native and managed Back, taking priority over accelerator");
+            Check(frame.key0==0&&frame.key1==0&&frame.padButtons==0,"Driving assignments never become menu aliases");
             bindings.BeginCapture(Idas3ControlBindings.ActionId.Camera,Idas3ControlBindings.Slot.Controller,3);frame=default;bindings.ApplyMenu(ref frame,true);Check(frame.key0==0&&frame.key1==0,"Capture blocks menu aliases");bindings.CancelCapture();
             bindings.SelectControllerProfile("private-wheel","Private wheel",true);
             var pedal=new Idas3ControllerControl{path="pedal",label="Pedal",minimum=-1,maximum=1,value=-1};
@@ -61,7 +61,7 @@ public static class Idas3ControllerMenuChecks
             Check(bindings.TrySetDraftControl(Idas3ControlBindings.ActionId.SteerRight,wheel,1,0),"Bind wheel steering");Check(bindings.ApplyDraft(),"Save private wheel bindings");
             bindings.Poll(k=>false,default,4,new[]{pedal,wheel});frame=default;bindings.ApplyMenu(ref frame,true);
             pedal.value=1;wheel.value=1;bindings.Poll(k=>false,default,5,new[]{pedal,wheel});frame=default;bindings.ApplyMenu(ref frame,true);
-            Check((frame.key0&(1u<<13))!=0&&(frame.key1&(1u<<7))!=0,"Physical wheel control snapshots navigate and confirm");
+            Check(frame.key0==0&&frame.key1==0,"Unassigned wheel controls do not navigate");
             var focus=new Idas3MenuFocus();Action build=()=>{focus.Begin();focus.Control("first",new Rect(0,0,30,30),true,true);focus.Control("disabled",new Rect(0,35,30,30),false,true);focus.Control("second",new Rect(0,70,30,30),true,true);focus.End();};build();
             focus.Poll(0,0,true,false,false,0);Check(!focus.Control("first",default,true,true),"Held open confirm is blocked");
             focus.Poll(0,0,false,false,false,1);focus.Poll(0,1,false,false,false,2);Check(focus.Selected=="second","Navigation skips disabled controls");

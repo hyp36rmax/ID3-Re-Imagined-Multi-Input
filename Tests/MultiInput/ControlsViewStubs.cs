@@ -100,14 +100,18 @@ namespace UnityEngine
         public static Color color, backgroundColor;
         public static bool enabled = true;
         public static string Click;
+        public static int ScrollCalls;
+        public static readonly List<(Rect rect, string label, int font)> Drawn = new List<(Rect, string, int)>();
         public static readonly List<string> Labels = new List<string>();
         public static void Label(Rect rect, string value, GUIStyle style)
         {
             Labels.Add(value);
+            Drawn.Add((rect, value, style.fontSize));
         }
 
         public static bool Button(Rect rect, string value, GUIStyle style)
         {
+            Drawn.Add((rect, value, style.fontSize));
             if (enabled && Click == value)
             {
                 Click = null;
@@ -125,7 +129,12 @@ namespace UnityEngine
         {
         }
 
-        public static Vector2 BeginScrollView(Rect outer, Vector2 scroll, Rect inner) => scroll;
+        public static Vector2 BeginScrollView(Rect outer, Vector2 scroll, Rect inner)
+        {
+            ++ScrollCalls;
+            return scroll;
+        }
+
         public static void EndScrollView()
         {
         }

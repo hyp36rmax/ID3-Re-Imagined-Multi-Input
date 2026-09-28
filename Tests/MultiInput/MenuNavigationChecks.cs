@@ -128,7 +128,7 @@ internal static class MenuNavigationChecks
         Check(bindings.MenuEvent(M.Right), "fresh excursion allowed");
         steering.value = -.8f;
         Poll();
-        Check(bindings.MenuEvent(M.Left), "independent opposite excursion");
+        Check(!bindings.MenuEvent(M.Left), "opposite direction requires neutral before another excursion");
         Poll(3);
         Check(bindings.MenuEvents == 0, "context entry while deflected blocks navigation");
         steering.value = .8f; Poll(3); Check(bindings.MenuEvents == 0, "entry guard also covers the opposite direction before observed neutral");
@@ -280,7 +280,15 @@ internal static class MenuNavigationChecks
         bindings.ApplyMenu(ref frame, true);
         Check(frame.key1 == 0 && frame.padButtons == 0 && !bindings.RawPauseHeld, "Test Controls draft events never enter surrounding menu packet");
         bindings.Poll(key => key == KeyCode.Escape || key == KeyCode.F1, default, now, provider.Controls, provider.Snapshot);
-        Check(bindings.RawPauseHeld && bindings.RawOnlineHeld, "Escape and F1 keyboard recovery remain independent");
+        bindings.EvaluateMenuNavigation(3, true, true);
+        Check(!bindings.RawPauseHeld && !bindings.RawOnlineHeld, "test ownership consumes recovery and gameplay shortcuts");
+        bindings.Poll(_ => false, default, now, provider.Controls, provider.Snapshot);
+        bindings.EvaluateMenuNavigation(0, true, false);
+        bindings.Poll(key => key == KeyCode.Escape || key == KeyCode.F1, default, now, provider.Controls, provider.Snapshot);
+        bindings.EvaluateMenuNavigation(0, true, false);
+        Check(bindings.RawPauseHeld, "fresh Escape uses the canonical pause dispatcher in gameplay");
+        bindings.EvaluateMenuNavigation(0, true, false);
+        Check(!bindings.RawPauseHeld, "held Escape does not repeat");
         steering.value = 0;
         Poll();
         Check(Assign(M.Up, "dpad/up") && Assign(M.Back, "back") && bindings.ApplyExperimentalDraft(), "explicit button/POV reassignment after reconnect");
