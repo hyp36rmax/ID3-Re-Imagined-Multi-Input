@@ -233,9 +233,9 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
         for(int i=0;i<5;++i)yield return WheelInput(1);yield return WheelInput(confirm:true);Check(!host.GameOptions.HasUnsavedChanges,"Wheel reaches Apply");
         yield return WheelInput(back:true);yield return WheelInput(1);Check(host.PauseMenu.SelectedTab==1,"Wheel selects Graphics category");
         yield return WheelInput(1);yield return WheelInput(1);yield return WheelInput(confirm:true);yield return WheelInput(1);
-        yield return WheelInput(confirm:true);yield return WheelInput(confirm:true);Check(host.PauseMenu.BindingChoiceVisible,"Wheel opens binding actions");
+        yield return WheelInput(confirm:true);yield return WheelInput(confirm:true);Check(host.ControlBindings.IsCapturing,"Wheel begins direct capture");
         yield return new WaitForEndOfFrame();picture=ScreenCapture.CaptureScreenshotAsTexture();File.WriteAllBytes(Path.Combine(root,"wheel-bindings.png"),picture.EncodeToPNG());Destroy(picture);
-        yield return WheelInput(back:true);Check(!host.PauseMenu.BindingChoiceVisible,"Wheel cancels binding actions");
+        yield return WheelInput(back:true);Check(!host.ControlBindings.IsCapturing,"Wheel cancels capture");
         yield return WheelInput(back:true);yield return WheelInput(back:true);
         yield return WheelInput(back:true);yield return WheelInput(back:true);Check(!host.PauseMenu.IsOpen,"Wheel exits pause");
         menu.SetOpen(true);yield return Frames(6);yield return WheelAction(":JOIN WITH ADDRESS");yield return WheelAction(":EDIT");yield return WheelAction(":1");yield return WheelAction(":DONE");yield return WheelInput(back:true);

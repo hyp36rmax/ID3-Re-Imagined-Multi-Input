@@ -39,8 +39,9 @@ public static class Idas3ControllerMenuChecks
             menu.OpenAttractOptions();menu.SelectTab(3);menu.SelectControllerPage(2);
             var controls=(IIdas3ControlsServices)menu;
             controls.Rebind(Idas3ControlBindings.ActionId.Camera,Idas3ControlBindings.Slot.Primary);
-            Check(menu.BindingChoiceVisible&&!bindings.IsCapturing,"binding chooser reachable through module adapter");menu.Back();
-            controls.Rebind(Idas3ControlBindings.ActionId.Camera,Idas3ControlBindings.Slot.Primary);menu.Activate();
+            Check(bindings.IsCapturing,"assignment immediately captures through module adapter");menu.Back();
+            bindings.Poll(k=>false,default,Time.realtimeSinceStartupAsDouble);
+            controls.Rebind(Idas3ControlBindings.ActionId.Camera,Idas3ControlBindings.Slot.Primary);
             Check(bindings.IsCapturing,"shared capture starts");
             bindings.Poll(k=>false,default,Time.realtimeSinceStartupAsDouble+16);Check(!bindings.IsCapturing,"capture timeout");menu.SetOpen(false);
             var songs=go.AddComponent<Idas3RaceMusicMenu>();songs.Initialize(new[]{new Idas3RaceMusicMenu.Entry{id=1,title="First",stage=1},new Idas3RaceMusicMenu.Entry{id=2,title="Second",stage=2}},1);songs.SetOpen(true);

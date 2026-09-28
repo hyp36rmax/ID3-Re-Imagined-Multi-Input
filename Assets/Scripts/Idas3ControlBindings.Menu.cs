@@ -162,16 +162,6 @@ public sealed partial class Idas3ControlBindings
                     return false;
                 }
 
-        for (int i = 0; i < MenuActionCount; ++i)
-        {
-            var other = experimentalDraft.menuActions[i];
-            if (i != (int)action && other.assigned && other.runtimePath == binding.controlPath && other.binding.controlDirection == binding.controlDirection)
-            {
-                LastError = "Menu control already assigned to " + MenuActionNames[i] + ". Clear it first.";
-                return false;
-            }
-        }
-
         var calibrated = binding.Clone();
         if (useCapturedExtent && !calibrated.controlButton)
         {
@@ -186,6 +176,20 @@ public sealed partial class Idas3ControlBindings
         {
             LastError = "Invalid menu calibration.";
             return false;
+        }
+
+        for (int i = 0; i < MenuActionCount; ++i)
+        {
+            var other = experimentalDraft.menuActions[i];
+            if (i != (int)action && other.assigned && other.runtimePath == binding.controlPath && other.binding.controlDirection == binding.controlDirection)
+            {
+                int conflict = i;
+                return OfferReplacement(MenuActionNames[i], () =>
+                {
+                    experimentalDraft.menuActions[conflict] = new ExperimentalAssignment();
+                    return SetMenuControl(action, calibrated, false);
+                });
+            }
         }
 
         calibrated.controlPath = source.localPath;

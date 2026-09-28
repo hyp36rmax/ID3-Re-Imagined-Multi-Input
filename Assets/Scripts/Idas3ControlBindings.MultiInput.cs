@@ -324,6 +324,13 @@ public sealed partial class Idas3ControlBindings
                 evaluatedBinding.key1 = keyboard.actions[i].key1;
                 evaluatedBinding.key2 = keyboard.actions[i].key2;
                 evaluatedBinding.key3 = keyboard.actions[i].key3;
+                foreach (var owner in assignments.actions)
+                {
+                    if (owner.runtimePath == null || !experimentalSources.TryGetValue(owner.runtimePath, out var keySource) || keySource.key == UnityEngine.KeyCode.None) continue;
+                    if (keySource.key == evaluatedBinding.key1) evaluatedBinding.key1 = UnityEngine.KeyCode.None;
+                    if (keySource.key == evaluatedBinding.key2) evaluatedBinding.key2 = UnityEngine.KeyCode.None;
+                    if (keySource.key == evaluatedBinding.key3) evaluatedBinding.key3 = UnityEngine.KeyCode.None;
+                }
                 bool live = assignment.assigned && assignment.runtimePath != null && experimentalControls.ContainsKey(assignment.runtimePath);
                 evaluatedBinding.controlPath = live ? assignment.runtimePath : null;
                 if (!live)
@@ -386,14 +393,26 @@ public sealed partial class Idas3ControlBindings
 
         if (source.key != UnityEngine.KeyCode.None)
         {
-            // Reuse reserved-key and conflict validation without mutating original storage.
+            // New assignments shadow this key only in the experimental evaluator;
+            // the player's original keyboard file is never rewritten by replacement.
             var candidate = draft.Clone();
+            int conflict = -1;
+            for (int i = 0; i < candidate.actions.Length; ++i)
+                if (i != (int)action)
+                {
+                    var other = candidate.actions[i];
+                    if (other.key1 == source.key || other.key2 == source.key || other.key3 == source.key) conflict = i;
+                    if (other.key1 == source.key) other.key1 = UnityEngine.KeyCode.None;
+                    if (other.key2 == source.key) other.key2 = UnityEngine.KeyCode.None;
+                    if (other.key3 == source.key) other.key3 = UnityEngine.KeyCode.None;
+                }
             SetKey(candidate.actions[(int)action], Slot.Primary, source.key);
-            if (!Validate(candidate, out string error))
-            {
-                LastError = error;
-                return false;
-            }
+            if (!Validate(candidate, out string error)) { LastError = error; return false; }
+            bool alreadyOwned = false;
+            foreach (var assignment in experimentalDraft.actions)
+                if (assignment.binding.controlPath == source.localPath) alreadyOwned = true;
+            if (conflict >= 0 && !alreadyOwned && !applyingReplacement)
+                return OfferReplacement(ActionName((ActionId)conflict), () => SetExperimentalControl(action, binding));
         }
 
         for (int i = 0; i < 10; ++i)
@@ -401,8 +420,13 @@ public sealed partial class Idas3ControlBindings
             var other = experimentalDraft.actions[i];
             if (i != (int)action && other.assigned && other.runtimePath == binding.controlPath && other.binding.controlDirection == binding.controlDirection)
             {
-                LastError = "Already assigned to " + ActionName((ActionId)i) + ". Clear that assignment first; no other action changed.";
-                return false;
+                int conflict = i;
+                var proposed = binding.Clone();
+                return OfferReplacement(ActionName((ActionId)i), () =>
+                {
+                    experimentalDraft.actions[conflict] = new ExperimentalAssignment();
+                    return SetExperimentalControl(action, proposed);
+                });
             }
         }
 

@@ -358,6 +358,8 @@ public sealed partial class Idas3ControllerDevices : IDisposable
             if (!button && !trigger && axis.normalize && axis.normalizeZero <= axis.normalizeMin) minimum = 0;
             if (axis.invert && minimum == 0 && !button && !trigger) { minimum = -1; maximum = 0; }
             string name = string.IsNullOrWhiteSpace(control.displayName) ? path : control.displayName;
+            if (control.parent is DpadControl && button)
+                name = "POV " + char.ToUpperInvariant(control.name[0]) + control.name.Substring(1);
             device.controls.Add(new Idas3ControllerControl { path = path, label = name, minimum = minimum, maximum = maximum, button = button });
             device.axes.Add(axis);
         }

@@ -266,6 +266,44 @@ public sealed partial class Idas3ControlBindings
         EnsureInitialized(); CheckAction(action); CheckSlot(slot);
         if (slot == Slot.Controller) { LastError = "Choose a keyboard slot for this key."; return false; }
         var candidate = draft.Clone(); SetKey(candidate.actions[(int)action], slot, key);
+        if (ExperimentalDraftEnabled && key != KeyCode.None)
+            for (int i = 0; i < experimentalDraft.actions.Length; ++i)
+                if (i != (int)action && experimentalDraft.actions[i].binding.controlPath == KeyboardSourcePrefix + (int)key)
+                {
+                    int conflict = i;
+                    return OfferReplacement(ActionName((ActionId)i), () =>
+                    {
+                        experimentalDraft.actions[conflict] = new ExperimentalAssignment();
+                        experimentalDirty = true;
+                        // Remove the same key's shadowed legacy occurrences as
+                        // part of this explicit Keyboard edit, not a second prompt.
+                        for (int otherIndex = 0; otherIndex < candidate.actions.Length; ++otherIndex)
+                        {
+                            if (otherIndex == (int)action) continue;
+                            var other = candidate.actions[otherIndex];
+                            if (other.key1 == key) other.key1 = KeyCode.None;
+                            if (other.key2 == key) other.key2 = KeyCode.None;
+                            if (other.key3 == key) other.key3 = KeyCode.None;
+                        }
+                        return AcceptDraft(candidate);
+                    });
+                }
+        if (key != KeyCode.None)
+            for (int i = 0; i < candidate.actions.Length; ++i)
+                if (i != (int)action && (candidate.actions[i].key1 == key || candidate.actions[i].key2 == key || candidate.actions[i].key3 == key))
+                {
+                    int conflict = i;
+                    return OfferReplacement(ActionName((ActionId)i), () =>
+                    {
+                        var replacement = draft.Clone();
+                        var other = replacement.actions[conflict];
+                        if (other.key1 == key) other.key1 = KeyCode.None;
+                        if (other.key2 == key) other.key2 = KeyCode.None;
+                        if (other.key3 == key) other.key3 = KeyCode.None;
+                        SetKey(replacement.actions[(int)action], slot, key);
+                        return AcceptDraft(replacement);
+                    });
+                }
         return AcceptDraft(candidate);
     }
     public bool TrySetDraftPad(ActionId action, PadInput input)
@@ -289,7 +327,16 @@ public sealed partial class Idas3ControlBindings
         var candidate=draft.Clone();string notice=null;
         if(ControllerIdentity(binding)!=null)for(int i=0;i<10;++i)
             if(i!=(int)action&&ControllerIdentity(candidate.actions[i])==ControllerIdentity(binding))
-            {LastError="Already assigned to "+ActionName((ActionId)i)+". Clear that controller assignment explicitly before rebinding; no actions changed.";return false;}
+            {
+                int conflict = i;
+                return OfferReplacement(ActionName((ActionId)i), () =>
+                {
+                    var replacement = draft.Clone();
+                    ClearController(replacement.actions[conflict]);
+                    CopyController(binding, replacement.actions[(int)action]);
+                    return AcceptDraft(replacement);
+                });
+            }
         CopyController(binding,candidate.actions[(int)action]);
         if(!AcceptDraft(candidate))return false;LastNotice=notice;return true;
     }
@@ -330,7 +377,9 @@ public sealed partial class Idas3ControlBindings
         EnsureInitialized(); CheckAction(action); CheckSlot(slot);
         if (double.IsNaN(now) || double.IsInfinity(now)) throw new ArgumentException("Capture time must be finite.");
         captureAction = action; captureSlot = slot; captureDeadline = now + 15;
+        ClearReplacement();
         IsCapturing = true; captureArmed = false; CaptureError = null; LastError = null;LastNotice=null;
+        RememberOpeningAxes();
         // Wheels can report a latching shifter/selector as a held button.
         // Ignore its initial state until release, then allow a fresh press.
         captureHeldButtons.Clear();
@@ -341,6 +390,7 @@ public sealed partial class Idas3ControlBindings
     }
     public void CancelCapture()
     {
+        ClearReplacement();
         menuCaptureAction = -1;
         if (!IsCapturing) return;
         IsCapturing = captureArmed = false; CapturePrompt = ""; CaptureError = null; BlockUntilRelease();
@@ -381,12 +431,20 @@ public sealed partial class Idas3ControlBindings
             if (double.IsNaN(now) || double.IsInfinity(now) || now >= captureDeadline)
             { CancelCapture(); CaptureError = genericProfile&&controls.Count==0?"This device exposes no usable inputs. Check the device driver and mode.":"No control selected. Try again.";
                 Debug.LogWarning("IDAS3 binding capture timed out: "+ActiveControllerProfileLabel+"; usable controls="+controls.Count+"; "+CaptureError);return; }
+            if (ConflictPending)
+            {
+                if (!KeysHeld()) replacementKeyArmed = true;
+                else if (replacementKeyArmed && (Held(KeyCode.Return) || Held(KeyCode.KeypadEnter))) ResolveCaptureConflict(true);
+                return;
+            }
             if (!captureArmed)
             {
                 // Pedals commonly rest at +1 or -1. Only buttons/keys must be
                 // released; axes arm at their measured rest instead of zero.
                 bool arm=controls.Count>0? !ButtonsOrKeysHeld():!anyHeld;
-                if (arm) { captureArmed = true;SnapshotRest(); CapturePrompt = menuCaptureAction >= 0 ? "Move comfortably; first detected movement sets the menu extent. Escape cancels." : captureSlot == Slot.Controller ? "Press a button or move one axis/pedal. Escape cancels." : "Press a key. Escape cancels."; }
+                foreach (var control in controls.Values)
+                    if (IsHat(control) && control.value > .5f) arm = false;
+                if (arm && OpeningInputsReleased()) { captureArmed = true;SnapshotRest(); CapturePrompt = menuCaptureAction >= 0 ? "Move comfortably; first detected movement sets the menu extent. Escape cancels." : captureSlot == Slot.Controller ? "Press a button or move one axis/pedal. Escape cancels." : "Press a key. Escape cancels."; }
                 return;
             }
             bool attempted = false, accepted = false;
@@ -577,7 +635,7 @@ public sealed partial class Idas3ControlBindings
             float amount=control.button?(control.value>.5f?2:0):Math.Abs(delta)/(control.maximum-control.minimum);
             if(amount>.20f)++candidates;
             if(amount>score){best=control;score=amount;direction=control.button?1:Math.Sign(delta);rest=control.button?0:baseline;}
-        }if(ExperimentalDraftEnabled&&candidates>1){CaptureError="Move only one control at a time; ambiguous movement was not assigned.";return null;}return best;
+        }if(candidates>1){CaptureError="Move only one control at a time; ambiguous movement was not assigned.";captureArmed=false;return null;}return best;
     }
     private float CustomAmount(Binding binding) => !ReferenceEquals(controls, experimentalControls) &&
         !string.IsNullOrEmpty(binding.controlPath) && reconnectHeldControls.Contains(binding.controlPath) ? 0 : CustomAmountRaw(binding);

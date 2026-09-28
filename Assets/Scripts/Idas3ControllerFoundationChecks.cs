@@ -52,17 +52,15 @@ public static class Idas3ControllerFoundationChecks
             // cancelling input. A synchronous batch check must supply the next
             // released sample just as the host does; opening the chooser is not
             // allowed to bypass that guard.
-            Check(bindings.SuppressInput && !menu.BindingChoiceVisible,
+            Check(bindings.SuppressInput && !bindings.IsCapturing,
                 "setup cancellation blocks immediate chooser activation");
             Poll(KeyCode.Escape);
             services.Rebind(Idas3ControlBindings.ActionId.Camera, Idas3ControlBindings.Slot.Primary);
-            Check(!menu.BindingChoiceVisible, "held cancel cannot reopen the chooser");
+            Check(!bindings.IsCapturing, "held cancel cannot reopen the chooser");
             Poll();
             Check(!bindings.SuppressInput, "released sample restores binding interaction");
             services.Rebind(Idas3ControlBindings.ActionId.Camera, Idas3ControlBindings.Slot.Primary);
-            Check(menu.BindingChoiceVisible, "Bindings opens Rebind/Clear after release");
-            menu.Activate();
-            Check(bindings.IsCapturing && !menu.BindingChoiceVisible, "Rebind starts shared capture");
+            Check(bindings.IsCapturing, "assignment confirmation begins shared capture directly");
             Poll();
             Poll(KeyCode.R);
             var rebound = sharedDraft.Clone();
@@ -71,12 +69,11 @@ public static class Idas3ControllerFoundationChecks
                 "fresh key changes only the requested slot");
             Poll();
             services.Rebind(Idas3ControlBindings.ActionId.Camera, Idas3ControlBindings.Slot.Primary);
-            menu.Navigate(1); // CLEAR, not a legacy action-row coordinate.
-            menu.Activate();
-            Check(!menu.BindingChoiceVisible && Idas3ControlBindings.Equivalent(sharedDraft, bindings.Draft),
-                "Clear removes only the selected slot through the chooser");
+            menu.ClearBindingCapture();
+            Check(!bindings.IsCapturing && Idas3ControlBindings.Equivalent(sharedDraft, bindings.Draft),
+                "Clear removes only the selected slot during direct capture");
+            Poll();
             services.Rebind(Idas3ControlBindings.ActionId.Camera, Idas3ControlBindings.Slot.Primary);
-            menu.Activate();
             Check(bindings.IsCapturing, "capture remains available after clearing");
             menu.Back();
             Check(!bindings.IsCapturing && Idas3ControlBindings.Equivalent(sharedDraft, bindings.Draft)

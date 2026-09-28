@@ -54,7 +54,7 @@ public static class Idas3MultiInputChecks {
             var navigationReload = new B(); navigationReload.Initialize(root);
             Check(navigationReload.MenuBindingName(B.MenuActionId.Confirm).Contains("reassign"), "actual JsonUtility reload retains menu preference, not session identity");
             menu.SelectControllerPage(2); services.RebindMenu(B.MenuActionId.Up);
-            Check(menu.BindingChoiceVisible, "Menu adapter opens shared chooser");
+            Check(b.IsCapturing, "Menu assignment begins capture directly");
             string savedExperimental = File.ReadAllText(b.ExperimentalFilePath);
             string confirmAssignment = b.MenuBindingName(B.MenuActionId.Confirm);
             string priorUpAssignment = b.MenuBindingName(B.MenuActionId.Up);
@@ -63,8 +63,7 @@ public static class Idas3MultiInputChecks {
             InputSystem.QueueStateEvent(pedals, new GamepadState());
             InputSystem.QueueStateEvent(shifter, new GamepadState());
             Poll();
-            menu.Activate();
-            Check(b.IsCapturing && !menu.BindingChoiceVisible, "Menu Rebind starts the shared capture");
+            Check(b.IsCapturing, "Menu uses shared capture after release");
             Poll();
             InputSystem.QueueStateEvent(shifter, new GamepadState().WithButton(GamepadButton.North));
             Poll();
@@ -72,8 +71,9 @@ public static class Idas3MultiInputChecks {
                 "Menu capture assigns a fresh control from another device");
             InputSystem.QueueStateEvent(shifter, new GamepadState()); Poll();
             services.RebindMenu(B.MenuActionId.Up);
-            Check(menu.BindingChoiceVisible, "Menu chooser reopens after release");
-            menu.Navigate(1); menu.Activate();
+            Check(b.IsCapturing, "Menu capture reopens after release");
+            menu.ClearBindingCapture();
+            Poll();
             Check(b.MenuBindingName(B.MenuActionId.Up) == priorUpAssignment
                 && b.MenuBindingName(B.MenuActionId.Confirm) == confirmAssignment
                 && File.ReadAllText(b.ExperimentalFilePath) == savedExperimental,

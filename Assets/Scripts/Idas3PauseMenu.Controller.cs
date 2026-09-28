@@ -121,8 +121,8 @@ public sealed partial class Idas3PauseMenu : IIdas3ControlsServices
         bindings.DisarmMenuNavigation();
     }
 
-    void IIdas3ControlsServices.Rebind(Idas3ControlBindings.ActionId action, Idas3ControlBindings.Slot slot) => OpenBindingChoice(action, slot);
-    void IIdas3ControlsServices.RebindMenu(Idas3ControlBindings.MenuActionId action) => OpenMenuBindingChoice(action);
+    void IIdas3ControlsServices.Rebind(Idas3ControlBindings.ActionId action, Idas3ControlBindings.Slot slot) => BeginBindingCapture(action, slot);
+    void IIdas3ControlsServices.RebindMenu(Idas3ControlBindings.MenuActionId action) => BeginMenuBindingCapture(action);
     void IIdas3ControlsServices.AdjustFeedback(int row, int direction) => AdjustWheel(row, direction);
     void IIdas3ControlsServices.SelectSavedController()
     {
