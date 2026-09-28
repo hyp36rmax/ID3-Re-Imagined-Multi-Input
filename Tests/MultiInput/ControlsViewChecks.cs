@@ -91,6 +91,9 @@ internal static class ControlsViewChecks
         Check(!view.Setup.Open && view.Page == 1, "visible cancel leaves wizard");
         Draw("Test Inputs");
         Check(view.Testing, "Test Inputs starts on entry");
+        Draw();
+        Check(GUI.Labels.Contains("Other Inputs") && GUI.Labels.Contains("Steering"), "Test Inputs retains evaluated steering and adds activity section");
+        Check(GUI.Drawn.TrueForAll(item => item.rect.y >= 0 && item.rect.y + item.rect.height <= 680), "Test Inputs activity and exit controls remain inside the panel");
         Draw("Devices");
         Check(!view.Testing, "leaving Test Inputs stops test ownership");
         Draw("SAVE CHANGES");

@@ -33,6 +33,31 @@ public static class Idas3MultiInputChecks {
             void Poll(){now=Math.Max(now+.02,Time.realtimeSinceStartupAsDouble);InputSystem.Update();provider.Tick(false);b.Poll(_=>false,default,now,provider.Controls,provider.Snapshot);}
             Idas3EndpointSnapshot Endpoint(Gamepad pad)=>provider.Snapshot.Endpoints.First(e=>e.Identity.Fields.Any(f=>f.Name=="runtimeId"&&f.Value==pad.deviceId.ToString()));
             bool Assign(B.ActionId action,Gamepad pad,string path,int direction,float rest){var e=Endpoint(pad);return b.TrySetExperimentalControl(action,e.Token,e.ConnectionGeneration,path,direction,rest);}
+            // Actual Unity Gamepad state bits -> decoded POV children -> capture
+            // -> stored name -> menu evaluator. This is not a DD2 HID report.
+            var hatButtons = new[] { GamepadButton.DpadUp, GamepadButton.DpadDown, GamepadButton.DpadLeft, GamepadButton.DpadRight };
+            var hatNames = new[] { "Up", "Down", "Left", "Right" };
+            Poll();
+            for (int i = 0; i < hatButtons.Length; ++i)
+            {
+                InputSystem.QueueStateEvent(wheel, new GamepadState()); Poll();
+                b.BeginMenuCapture(B.MenuActionId.Up, now); Poll();
+                InputSystem.QueueStateEvent(wheel, new GamepadState().WithButton(hatButtons[i])); Poll();
+                Check(!b.IsCapturing && b.MenuBindingName(B.MenuActionId.Up).Contains("POV " + hatNames[i]),
+                    "Unity POV raw bit captures the decoded " + hatNames[i] + " child");
+                InputSystem.QueueStateEvent(wheel, new GamepadState()); Poll(); b.EvaluateMenuNavigation(2, true, true);
+                InputSystem.QueueStateEvent(wheel, new GamepadState().WithButton(hatButtons[i])); Poll(); b.EvaluateMenuNavigation(2, true, true);
+                Check(b.MenuEvent(B.MenuActionId.Up), "stored POV direction evaluates the assigned menu action");
+                Poll(); b.EvaluateMenuNavigation(2, true, true); Check(b.MenuEvents == 0, "held POV cannot repeat");
+                InputSystem.QueueStateEvent(wheel, new GamepadState()); Poll();
+                b.ClearMenuAssignment(B.MenuActionId.Up);
+            }
+            b.BeginMenuCapture(B.MenuActionId.Up, now); Poll();
+            InputSystem.QueueStateEvent(wheel, new GamepadState().WithButton(GamepadButton.DpadUp).WithButton(GamepadButton.DpadLeft)); Poll();
+            Check(b.IsCapturing, "Unity diagonal cannot capture by enumeration order");
+            InputSystem.QueueStateEvent(wheel, new GamepadState().WithButton(GamepadButton.DpadUp)); Poll();
+            Check(b.IsCapturing, "Unity diagonal must fully release before another capture");
+            b.CancelCapture(); InputSystem.QueueStateEvent(wheel, new GamepadState()); Poll();
             Poll();Check(Assign(B.ActionId.SteerLeft,wheel,"leftStick/x",-1,0)&&Assign(B.ActionId.SteerRight,wheel,"leftStick/x",1,0),"wheel pair");
             Check(Assign(B.ActionId.Accelerate,pedals,"rightTrigger",1,0)&&Assign(B.ActionId.Brake,pedals,"leftTrigger",1,0)&&Assign(B.ActionId.ShiftUp,shifter,"buttonSouth",1,0),"independent pedals and shifter");
             options.Draft.musicVolume=.23f;services.Save();
@@ -94,6 +119,7 @@ public static class Idas3MultiInputChecks {
             InputSystem.AddDevice(pedals);Poll();Check(!b.HasControllerAssignment(B.ActionId.Accelerate),"reconnect requires explicit reassignment");
             menu.Back();menu.SelectControllerPage(1);services.SelectSavedController();
             services.Discard();Check(b.ExperimentalDraftEnabled&&b.ExperimentalEnabled,"Discard cancels mode change");
+            Idas3ControllerDevicesSmoke.RunHatChecks(Path.Combine(root, "hid-hat"), Check);
             Directory.CreateDirectory("Verification/multi-input");File.WriteAllText("Verification/multi-input/unity-checks.txt","PASS "+checks+" real Unity synthetic checks; physical hardware and rendered UI remain pending.\n");
             Debug.Log("PASS multi-input Unity checks: "+checks);
         }finally{UnityEngine.Object.DestroyImmediate(go);if(wheel.added)InputSystem.RemoveDevice(wheel);if(pedals.added)InputSystem.RemoveDevice(pedals);if(shifter.added)InputSystem.RemoveDevice(shifter);if(Directory.Exists(root))Directory.Delete(root,true);}

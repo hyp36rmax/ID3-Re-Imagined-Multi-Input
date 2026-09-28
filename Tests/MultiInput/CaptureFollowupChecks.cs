@@ -47,6 +47,14 @@ internal static class CaptureFollowupChecks
             b.ResolveCaptureConflict(true);
             Check(b.Draft.actions[6].key1 == KeyCode.E && b.Draft.actions[4].key1 == KeyCode.None, "Replace clears only conflicting keyboard slot");
             Check(File.ReadAllText(b.FilePath) == original, "replacement remains unsaved");
+            b.CancelEdit(false); key = KeyCode.None; Poll();
+            b.BeginCapture(B.ActionId.Camera, B.Slot.Controller, now);
+            Check(!b.TrySetDraftPad(B.ActionId.Camera, B.PadInput.B) && b.ConflictPending, "legacy pad conflict uses the same confirmation contract");
+            b.ResolveCaptureConflict(false);
+            Check(b.Draft.actions[4].pad == B.PadInput.B && b.Draft.actions[6].pad == B.PadInput.Y, "legacy pad Cancel leaves both assignments");
+            Poll(); b.BeginCapture(B.ActionId.Camera, B.Slot.Controller, now);
+            b.TrySetDraftPad(B.ActionId.Camera, B.PadInput.B); b.ResolveCaptureConflict(true);
+            Check(b.Draft.actions[4].pad == B.PadInput.None && b.Draft.actions[6].pad == B.PadInput.B, "legacy pad Replace clears only the confirmed conflict");
             b.CancelEdit(false); key = KeyCode.None; Poll(); b.SetExperimentalDraftEnabled(true); Poll();
             var endpoint = provider.Snapshot.Endpoints.Single(e => e.CanRead);
             Check(b.TrySetExperimentalControl(B.ActionId.SteerRight, endpoint.Token, endpoint.ConnectionGeneration, "steering", 1, 0), "driving steering fixture");
@@ -91,8 +99,53 @@ internal static class CaptureFollowupChecks
             var evaluated = b.EvaluateDraftDriving();
             Check((evaluated.key2 & (1u << (87 & 31))) == 0 && evaluated.leftTrigger == 255, "experimental keyboard ownership suppresses original action without duplicate input");
             Check(File.ReadAllText(b.FilePath) == original, "new keyboard assignment preserves original file");
+            key = KeyCode.None; Poll();
+            string beforeLostSource = JsonUtility.ToJson(b.SaveDraftCheckpoint().experimental);
+            b.BeginMenuCapture(B.MenuActionId.Right, now); Poll(); hats[0].value = 1; Poll();
+            Check(b.ConflictPending, "source-loss fixture has a pending confirmed-transfer proposal");
+            InputSystem.Remove(device); Poll(); b.ResolveCaptureConflict(true);
+            Check(!b.IsCapturing && JsonUtility.ToJson(b.SaveDraftCheckpoint().experimental) == beforeLostSource,
+                "failed Replace after disconnect restores both assignments atomically");
+            checks += NativeHatChecks(Path.Combine(root, "native"));
             return checks;
         }
-        finally { InputSystem.Remove(device); }
+        finally { if (device.added) InputSystem.Remove(device); }
     }
+    private static int NativeHatChecks(string root)
+    {
+        int checks = 0;
+        void Check(bool ok, string why) { ++checks; if (!ok) throw new Exception(why); }
+        ushort buttons = 0;
+        double now = 0;
+        using var provider = new Idas3ControllerDevices(() => now, (uint slot, out Idas3Native.PadState state) =>
+        {
+            state = new Idas3Native.PadState { gamepad = new Idas3Native.GamepadState { buttons = buttons } };
+            return slot == 0 ? 0u : 1167u;
+        }, _ => false);
+        provider.Initialize(root);
+        var b = new B(); b.Initialize(root); b.SetExperimentalDraftEnabled(true);
+        void Poll() { now += .02; provider.Tick(false); b.Poll(_ => false, default, now, provider.Controls, provider.Snapshot); }
+        var names = new[] { "up", "down", "left", "right" };
+        for (int i = 0; i < 4; ++i)
+        {
+            buttons = 0; Poll(); b.BeginMenuCapture(B.MenuActionId.Up, now); Poll();
+            buttons = (ushort)(1 << i); Poll();
+            Check(provider.TryRead(out var raw) && raw.buttons == buttons, "native POV mask reaches active pad unchanged");
+            Check(!b.IsCapturing && b.MenuBindingName(B.MenuActionId.Up).Contains("D-pad " + names[i]), "native POV capture uses matching stored direction label");
+            buttons = 0; Poll(); b.EvaluateMenuNavigation(2, true, true);
+            buttons = (ushort)(1 << i); Poll(); b.EvaluateMenuNavigation(2, true, true);
+            Check(b.MenuEvent(B.MenuActionId.Up), "native stored direction evaluates assigned menu action");
+            Poll(); b.EvaluateMenuNavigation(2, true, true);
+            Check(b.MenuEvents == 0, "native held POV emits once");
+            buttons = 0; Poll(); b.ClearMenuAssignment(B.MenuActionId.Up);
+        }
+        foreach (ushort diagonal in new ushort[] { 5, 9, 6, 10 })
+        {
+            buttons = 0; Poll(); b.BeginMenuCapture(B.MenuActionId.Up, now); Poll();
+            buttons = diagonal; Poll(); Check(b.IsCapturing, "native diagonal cannot silently pick a cardinal");
+            b.CancelCapture(); buttons = 0; Poll();
+        }
+        return checks;
+    }
+
 }

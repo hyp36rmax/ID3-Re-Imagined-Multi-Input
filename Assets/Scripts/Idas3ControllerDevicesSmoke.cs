@@ -71,6 +71,51 @@ public sealed class Idas3ControllerDevicesSmoke : MonoBehaviour
     }
     private void Hid(Joystick device,ushort pedal=65535,byte buttons=0,byte hat=8) =>
         InputSystem.QueueStateEvent(device,new HidState{report=16,x=32768,y=32768,pedal=pedal,buttons=buttons,hat=hat});
+    // Build-time synthetic HID report trace, separate from the rendered smoke.
+    // Uses the existing descriptor fixture; no physical device is read or driven.
+    internal static void RunHatChecks(string root, Action<bool, string> check)
+    {
+        var device = (Joystick)InputSystem.AddDevice(HidDescription(true));
+        double now = Time.realtimeSinceStartupAsDouble;
+        using (var provider = new Idas3ControllerDevices(() => now,
+            (uint slot, out Idas3Native.PadState state) => { state = default; return 1167; }, d => d == device))
+        try
+        {
+            void Queue(byte hat)
+            {
+                InputSystem.QueueStateEvent(device, new HidState { report = 16, x = 32768, y = 32768, pedal = 65535, hat = hat });
+                InputSystem.Update();
+            }
+            Queue(8); provider.Initialize(root);
+            var bindings = new Idas3ControlBindings(); bindings.Initialize(root); bindings.SetExperimentalDraftEnabled(true);
+            void Poll(byte hat)
+            {
+                Queue(hat); now = Math.Max(now + .02, Time.realtimeSinceStartupAsDouble); provider.Tick(false);
+                bindings.Poll(_ => false, default, now, provider.Controls, provider.Snapshot);
+            }
+            string[] names = { "POV Up", "POV Right", "POV Down", "POV Left" };
+            for (byte raw = 0; raw <= 8; ++raw)
+            {
+                Poll(8);
+                bindings.BeginMenuCapture(Idas3ControlBindings.MenuActionId.Up, now); Poll(8); Poll(raw);
+                int active = 0;
+                foreach (var control in provider.Controls)
+                    if (control.label != null && control.label.StartsWith("POV ", StringComparison.Ordinal))
+                    {
+                        int index = Array.IndexOf(names, control.label);
+                        bool expected = index >= 0 && raw < 8 && (raw == index * 2 || raw == (index * 2 + 7) % 8 || raw == (index * 2 + 1) % 8);
+                        check((control.value > .5f) == expected, "HID raw hat " + raw + " decodes " + control.label);
+                        if (control.value > .5f) ++active;
+                    }
+                check(active == (raw == 8 ? 0 : raw % 2 == 0 ? 1 : 2), "HID raw hat direction count " + raw);
+                if (raw < 8 && raw % 2 == 0)
+                    check(!bindings.IsCapturing && bindings.MenuBindingName(Idas3ControlBindings.MenuActionId.Up).Contains(names[raw / 2]), "HID cardinal capture preserves decoded label/path " + raw);
+                else check(bindings.IsCapturing, "HID neutral/diagonal is not an arbitrary cardinal capture " + raw);
+                bindings.CancelCapture(); Poll(8); bindings.ClearMenuAssignment(Idas3ControlBindings.MenuActionId.Up);
+            }
+        }
+        finally { if (device.added) InputSystem.RemoveDevice(device); }
+    }
     private static readonly InputDeviceDescription BetaDescription = Description("IDAS3 Test Beta", "beta");
     private static readonly InputDeviceDescription GenericDescription = Description("IDAS3 Test Wheel", "wheel");
     private static InputDeviceDescription Description(string name,string serial) => new InputDeviceDescription {
