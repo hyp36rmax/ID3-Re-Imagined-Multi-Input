@@ -76,7 +76,7 @@ public sealed class Idas3ArcadeHud : IDisposable
         // This animation is never used to determine the live vehicle's state.
         float phase=cycle*8,drift=Mathf.SmoothStep(0,1,Mathf.InverseLerp(2,2.15f,phase))*(1-Mathf.SmoothStep(0,1,Mathf.InverseLerp(5,5.35f,phase)));
         uint level=(uint)Mathf.Clamp(Mathf.FloorToInt((phase-2)/.75f),0,3);
-        return new Telemetry{size=40,version=3,flags=1u|(phase>=2&&phase<5?8u:0u)|(level<<8),gear=1+Mathf.FloorToInt(cycle*5),speedKmh=35+cycle*170,rpm=1100+Mathf.Repeat(cycle*5,1)*7500,revLimit=8500,
+        return new Telemetry{size=40,version=4,flags=1u|(phase>=2&&phase<5?8u:0u)|(level<<8)|(6u<<16),gear=1+Mathf.FloorToInt(cycle*6),speedKmh=35+cycle*190,rpm=1100+Mathf.Repeat(cycle*5,1)*7500,revLimit=8500,
             throttle=cycle<.78f?Mathf.Clamp01(.3f+cycle):0,brake=cycle>.78f?Mathf.InverseLerp(.78f,1,cycle):0,driftOpacity=drift};
     }
     internal static bool Read(out Telemetry value){

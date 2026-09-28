@@ -2,12 +2,14 @@
 import json, math, struct
 from pathlib import Path
 import argparse
+from tsubaki_guardrails import align_guardrails
 parser=argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--output',type=Path,required=True)
 root=parser.parse_args().output
 b=(root/'road.bin').read_bytes(); assert b[:4]==b'HKR1'
 n=struct.unpack_from('<I',b,4)[0]
 roads=[[struct.unpack_from('<3f',b,8+(side*n+i)*12) for i in range(n)] for side in range(3)]
+roads,collision_roads,rail_report=align_guardrails(root,roads)
 def sub(a,b): return tuple(x-y for x,y in zip(a,b))
 def cross(a,b): return (a[1]*b[2]-a[2]*b[1],a[2]*b[0]-a[0]*b[2],a[0]*b[1]-a[1]*b[0])
 def norm(a):
@@ -16,15 +18,15 @@ def norm(a):
 # OriginalRacePath expects clockwise XZ cells (left to right along the course).
 if cross(sub(roads[2][0],roads[1][0]),sub(roads[0][1],roads[0][0]))[1]<0:
     roads[1],roads[2]=roads[2],roads[1]
+    collision_roads[1],collision_roads[2]=collision_roads[2],collision_roads[1]
 for suffix,points in zip(['','_l','_r'],roads):
     (root/f'tsubaki_path{suffix}.bin').write_bytes(struct.pack('<II',n,3)+b''.join(struct.pack('<3f',*p) for p in points))
 # Preserve every road-edge point when the signed 16-bit contact index permits.
 # Coarsening Tsubaki's tight bends can put the wall behind its visible edge.
-samples=list(range(0,n,max(1,math.ceil((n-1)*6/32760))))
-if samples[-1]!=n-1:samples.append(n-1)
+samples=list(range(len(collision_roads[0])))
 vertices=[]
 for i in samples:
-    a,c=roads[1][i],roads[2][i];direction=norm(sub(c,a));offset=tuple(x*8 for x in direction)
+    a,c=collision_roads[1][i],collision_roads[2][i];direction=norm(sub(c,a));offset=tuple(x*8 for x in direction)
     vertices.extend([sub(a,offset),a,c,tuple(x+y for x,y in zip(c,offset))])
 tri=[]
 for i in range(len(samples)-1):
@@ -65,3 +67,4 @@ header=struct.pack('<12I',0x52434c31,1,1,offset1,len(vertices),offset2,len(tri),
 manifest=json.loads((root/'scene.json').read_text())
 (root/'race.bin').write_bytes(b'HKD3'+struct.pack('<9i',*manifest['checkpoints'],*manifest['times']))
 print(f'D3 road exported: {n} path points, {len(tri)} contact triangles, {len(edges)} boundary edges')
+print(f'Lower guardrail alignment: {len(rail_report)} mesh samples, offsets {min(r["offset"] for r in rail_report):.3f}..{max(r["offset"] for r in rail_report):.3f} m')

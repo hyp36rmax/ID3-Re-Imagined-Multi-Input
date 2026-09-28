@@ -257,9 +257,15 @@ public sealed class Idas3ControllerDevicesSmoke : MonoBehaviour
         yield return Select("automatic");
         Check(host.ControllerDevices.ActiveProfileKey==genericProfile,"Automatic selection lost the current generic controller");
         InputSystem.RemoveDevice(generic);generic=null;yield return Frames(8);
-        Check(host.ControllerDevices.Controls.Count==0,"Locked automatic mode took another controller after disconnect");
+        Check(host.ControllerDevices.Controls.Count>0&&host.ControllerDevices.ActiveProfileKey==alphaProfile,
+            "Open menu did not recover a connected fallback after its automatic controller disappeared");
         generic=(Joystick)InputSystem.AddDevice(GenericDescription);Wheel();yield return Frames(12);
-        Check(menu.IsOpen&&host.ControllerDevices.ActiveProfileKey==genericProfile,"Automatic controller did not reconnect while paused");
+        Check(menu.IsOpen&&host.ControllerDevices.ActiveProfileKey==alphaProfile,
+            "A returning device stole input from the recovered live menu controller");
+        // Recovery may replace a missing source, but must not replace a live
+        // menu source. Explicitly choose the returned wheel for these checks.
+        yield return Select(DeviceKey("Wheel"));
+        Check(host.ControllerDevices.ActiveProfileKey==genericProfile,"Returned wheel lost its saved bindings");
         Wheel(1,0,1u<<5);yield return Frames(5);Wheel();yield return Frames(4);
         Check(menu.IsOpen&&menu.OptionsVisible&&menu.DiagnosticSelection==0,"Reconnected controller could not return to the Controls category");
         Wheel(1,0,1u<<5);yield return Frames(5);Wheel();yield return Frames(4);

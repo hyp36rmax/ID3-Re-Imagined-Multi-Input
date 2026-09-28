@@ -43,7 +43,18 @@ static class Checks {
         nativeResult=0;Both(true);Compare("native authority");
         var late=Device(104,"late wheel",0);InputSystem.Add(late);Both(false);Compare("new HID while native authoritative");
         nativeResult=1167;Both(true);Compare("Unity fallback after native loss");
-        InputSystem.Remove(a);Both(false);Compare("remove selected/legacy fallback");InputSystem.Add(a);Both(false);Compare("reconnect under menu lock");
+        // .38 deliberately fixes automatic fallback under menu lock. Keep the
+        // pre-.38 differential baseline, but assert this exception explicitly.
+        InputSystem.Remove(a);
+        Both(false);
+        Check(current.TryRead(out _) && !baseline.TryRead(out _),
+            "menu-locked removal restores an available controller; old baseline had none");
+        Check(current.ActiveName.StartsWith("pedals (", StringComparison.Ordinal) && current.SelectedKey == "automatic",
+            "fallback preserves automatic preference and selects the connected device");
+        InputSystem.Add(a);
+        Both(false);
+        Check(current.ActiveName.StartsWith("pedals (", StringComparison.Ordinal) && baseline.ActiveName.StartsWith("wheel (", StringComparison.Ordinal),
+            "reconnect under menu lock keeps the recovered active controller stable");
         // Beginning with a suppressed mirror must also preserve the baseline's eventual ordering.
         current.Dispose();baseline.Dispose();nativeResult=0;
         mirror.description=new Description{interfaceName="XInput",product="mirror",serial="duplicate"};

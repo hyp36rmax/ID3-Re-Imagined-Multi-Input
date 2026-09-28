@@ -1638,9 +1638,10 @@ struct App {
             {value(24),value(28),value(32)},*courseLightFsca);
         original::rotateOriginalMatrixPhase(matrix,1,0x8000,*courseLightFsca);return matrix;
     }
-    bool projectedRearViewActive()const{
-        return (battle||multiplayer.active)&&originalHandling&&originalCamera.ready()&&
-            (multiplayer.active||drivingView==OriginalDrivingView::Bumper)&&race.phase!=RacePhase::Finished;
+    bool raceRearViewActive()const{
+        // The rear camera belongs to every driving mode and front-camera choice.
+        return !menu&&!vsActive&&!replayPlaybackActive&&originalHandling&&
+            originalCamera.ready()&&race.phase!=RacePhase::Finished;
     }
     original::OriginalCarLightingSetup carLightingSetup()const{
         // Visual scopes contain two cars for multiplayer, while all physics
@@ -1755,7 +1756,7 @@ struct App {
             rivalProjectedHeadlight.advance(presentedSession().collision(),matrix.elements);
             //The rear callback draws the same published model, then updates
             //the rival's working query state again. Render never advances it.
-            if(projectedRearViewActive())rivalProjectedHeadlight.advance(presentedSession().collision(),matrix.elements);
+            if(raceRearViewActive())rivalProjectedHeadlight.advance(presentedSession().collision(),matrix.elements);
         }
     }
     void refreshReplayHeadlights(){
@@ -3163,7 +3164,7 @@ struct App {
         // The source rear camera sits inside the local car. Its body, plate
         // and aura belong only to the primary view; the peer remains visible
         // in both views. This also keeps chase-view mirrors clear.
-        if(multiplayer.active)for(auto i=playerRangeBegin;i<mesh.ranges.size();++i)mesh.ranges[i].viewMask=1;
+        for(auto i=playerRangeBegin;i<mesh.ranges.size();++i)mesh.ranges[i].viewMask=1;
         }
         if(rivalVisible){
             const auto position=lerp(previousRival.position,rivalVehicle.position,poseAlpha);
@@ -3244,7 +3245,7 @@ struct App {
         state.hudIntroFrame=originalHandling&&!replayPlaybackActive?originalRaceOwnerFrame:240u;
         state.frontend=&frontend;state.originalHandling=originalHandling;state.originalWeatherScenery=!wet||sceneWet;state.snow=courseIndex==8;state.musicName=audio.musicName();hud.resize(renderer.width,renderer.height);
         state.extendedCountdown=bool(importedCourse);state.timeExtended=raceFeedback.extensionTicks!=0;state.useDisplayedRemaining=originalHandling;
-        state.rearView=drawRearView&&!vsActive&&(battle||multiplayer.active)&&originalHandling&&originalCamera.ready()&&(multiplayer.active||drivingView==OriginalDrivingView::Bumper)&&race.phase!=RacePhase::Finished;
+        state.rearView=drawRearView&&raceRearViewActive();
         state.displayedRemaining6000=replayPlaybackActive?race.remaining6000:raceFeedback.displayedRemaining;
         auto displayRecords=results;
         displayRecords.livePanel=originalHandling&&!battle&&!multiplayer.active&&!replayOpponent&&!menu&&race.phase!=RacePhase::Finished;
@@ -3330,7 +3331,6 @@ struct App {
             vsBanner.paint(vsPixels,renderer.width,renderer.height);
             overlay=vsPixels.data();
         }else overlay=hud.paint(state);
-        if(replayPlaybackActive)rearView.reset();
         return renderer.draw(mesh,camera,target,night,wet,overlay,false,nullptr,rearView?&*rearView:nullptr);
     }
 };

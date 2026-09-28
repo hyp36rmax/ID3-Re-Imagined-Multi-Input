@@ -1,4 +1,11 @@
-0.3.95-community-replays.37
+0.3.95-community-replays.38
+REAR-VIEW MIRRORS AND COMMUNITY BUG FIXES
+All racing modes support rear-view mirrors with bumper, chase and natural cameras.
+Corrected Tsubaki lower-hairpin guardrail collision and wet-road shadows; restored meter speed colors and Infinity gear colors.
+Improved online controller recovery and separate wheel/pedal/shifter bindings. Included Sound Room fonts and fixed linked-folder updater staging.
+Only this version can submit new times; existing records and season 2 are preserved. Changed-file patches support .20 through .37.
+
+PREVIOUS UPDATE (.37)
 TSUBAKI LINE, PERSONAL-BEST GHOSTS AND SOUND ROOM
 Tsubaki Line now supports all directions and conditions, with corrected signs/scenery and leaderboard support. Uses Stage 3 Akina handling.
 Settings > Gameplay > Time Attack Ghost shows your save's fastest recorded run for the course, direction and weather. Complete a new run to create a ghost for an older time.
@@ -35,7 +42,7 @@ Provide your original Initial D Arcade Stage 3 GDS-0033 dump in the rom folder b
 No original ROM is included or downloaded. First launch creates rom/README.txt if needed. Updates and Full Repair preserve your ROM files and do not replace a missing or invalid dump.
 
 COMMUNITY TIME ATTACK
-Only 0.3.95-community-replays.37 can submit new times. After updating, complete a new Time Attack; queued runs from older builds are no longer eligible. Existing published times, replay downloads and the current season remain available.
+Only 0.3.95-community-replays.38 can submit new times. After updating, complete a new Time Attack; queued runs from older builds are no longer eligible. Existing published times, replay downloads and the current season remain available.
 Both online players need this version. Updates use a smaller changed-file patch when available for the installed version. Saves, settings, replays, custom music and locally supplied ROM files are preserved.
 
 FIXES INCLUDED FROM .28

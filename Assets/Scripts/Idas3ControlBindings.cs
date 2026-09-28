@@ -379,7 +379,8 @@ public sealed partial class Idas3ControlBindings
             // button can otherwise hold the release prompt open indefinitely).
             if (Held(KeyCode.Escape)) { CancelCapture(); return; }
             if (double.IsNaN(now) || double.IsInfinity(now) || now >= captureDeadline)
-            { CancelCapture(); CaptureError = "No control selected. Try again."; return; }
+            { CancelCapture(); CaptureError = genericProfile&&controls.Count==0?"This device exposes no usable inputs. Check the device driver and mode.":"No control selected. Try again.";
+                Debug.LogWarning("IDAS3 binding capture timed out: "+ActiveControllerProfileLabel+"; usable controls="+controls.Count+"; "+CaptureError);return; }
             if (!captureArmed)
             {
                 // Pedals commonly rest at +1 or -1. Only buttons/keys must be

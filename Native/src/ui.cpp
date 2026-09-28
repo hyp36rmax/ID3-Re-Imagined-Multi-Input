@@ -415,6 +415,14 @@ const std::uint32_t* Hud::paint(const UiState& s){
             originalResults.paint(target,width,height,records);
             if(s.hudIntroFrame>40)originalBattleNames.paintTimeAttack(target,width,height,s.frontend?unsigned(s.frontend->car):0u,s.frontend?&s.frontend->battleProfile:nullptr);
         }
+        if(s.rearView&&!battleHud&&!announcement){
+            // Reuse the original frame and its editable HUD group for Time Attack.
+            OriginalBattleHudState mirror;mirror.flags104=1;
+            OriginalBattleHudAnimation animation;
+            const auto draws=drawOriginalBattleHud(mirror,animation);
+            originalBattleHud.paintGame2d(std::span<std::uint32_t>(pixels,std::size_t(width)*height),width,height,draws,true);
+            battlePresentation_.mirrorEnabled=true;
+        }
         if(battleHud&&!announcement){
             const UnityUiHudScope battleGroup(onlineBattle?7:6);
             const auto frame=onlineBattle?s.onlineBattleHud.frame:s.battleHudFrame;

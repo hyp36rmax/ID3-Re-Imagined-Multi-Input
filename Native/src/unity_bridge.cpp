@@ -23,6 +23,7 @@
 #include "shared_time_import.h"
 #include "../tests/shared_import_app_tests.inl"
 #include "../tests/performance_options_app_tests.inl"
+#include "../tests/rear_view_app_tests.inl"
 #include "../tests/mode_flow_unity_fixture.inl"
 #include "../tests/save_change_menu_fixture.inl"
 #include <mutex>
@@ -364,6 +365,7 @@ IDAS3_UNITY_EXPORT int IDAS3_UNITY_CALL Idas3SceneModeFlowFixture(int scene){
         if(scene==-5)return runSharedTimeAppTests(*r.app)==0?1:0;
         if(scene==-6)return runSharedImportAppTests(*r.app)==0?1:0;
         if(scene==-7)return runPerformanceOptionsAppTests(*r.app)==0?1:0;
+        if(scene==-16)return runRearViewAppTests(*r.app)==0?1:0;
         if(scene==-8)return runPlayerReplayAppTests(*r.app)==0?1:0;
         if(scene==-9)return runSharedRecordResetAppTests(*r.app)==0?1:0;
         if(scene==-10){
@@ -1154,9 +1156,11 @@ int IDAS3_UNITY_CALL Idas3SceneGetWheelState(Idas3WheelState* out){
 int IDAS3_UNITY_CALL Idas3SceneGetHudTelemetry(Idas3HudTelemetry* out){
     auto& r=unityRuntime();std::lock_guard lock(r.renderMutex);
     if(!r.sceneMode||!r.app||!out||out->size!=sizeof(*out))return 0;
-    *out={sizeof(*out),3};const auto& app=*r.app;
+    *out={sizeof(*out),4};const auto& app=*r.app;
     if(app.menu||app.loadingActive||app.legendVisitActive||app.preRaceDialogueActive||app.extraModeVisitActive())return 1;
     out->flags=1u|(app.automatic?2u:0u)|(app.night?4u:0u);
+    const int gears=app.originalHandling&&app.presentedSession().ready()?int(app.presentedSession().parameters().transmission.maximumGear):app.config.gearCount;
+    out->flags|=uint32_t(std::clamp(gears,1,6))<<16;
     const auto analog=app.presentedHudAnalog();
     out->gear=app.vehicle.gear;out->speedKmh=analog.speed*3.6f;out->rpm=analog.rpm;
     out->revLimit=app.originalHandling&&app.presentedSession().ready()?app.presentedSession().parameters().transmission.workingBase:app.config.redlineRpm;

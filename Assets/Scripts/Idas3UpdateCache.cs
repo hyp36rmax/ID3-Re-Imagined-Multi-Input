@@ -14,7 +14,7 @@ using Microsoft.Win32.SafeHandles;
 // needs exclusive access. Unknown recovery state is deliberately retained.
 public static class Idas3UpdateCache
 {
-    public static string Root { get { return Path.Combine(Path.GetTempPath(), "InitialDUpdates"); } }
+    public static string Root { get { return Path.Combine(Idas3UpdatePaths.ResolveDirectory(Path.GetTempPath()), "InitialDUpdates"); } }
     private static readonly object gate = new object();
     private const int MaximumEntries = 100000, MaximumDepth = 48, MaximumStatusBytes = 32768;
     private static readonly HashSet<string> files = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {

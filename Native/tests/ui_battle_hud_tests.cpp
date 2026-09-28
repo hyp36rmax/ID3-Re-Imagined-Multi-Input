@@ -76,6 +76,7 @@ int main(int argc,char** argv)try{
             bool groups[8]{};
             for(const auto& draw:draws){require((draw.flags&8)!=0,"Race HUD draw lost its HUD marker");const unsigned group=(draw.flags>>8)&15;require(group<8,"Invalid HUD group");groups[group]=true;}
             require(groups[1]&&groups[2]&&groups[5],"Timer, speedometer or map is missing its group");
+            require(groups[4]&&hud.lastBattlePresentation().mirrorEnabled,"Every racing mode must retain the editable mirror frame");
             require(groups[mode==0?3:mode==1?6:7],"Record/Legend/online group is missing");
             require(!groups[mode==2?6:7],"Legend and online panels share a group");
             require(unityUiHudGroup()==0,"HUD group escaped its rendering scope");

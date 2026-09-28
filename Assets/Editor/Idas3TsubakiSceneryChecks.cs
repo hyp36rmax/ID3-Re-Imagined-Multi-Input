@@ -8,7 +8,7 @@ using UnityEngine.Rendering;
 // starting native gameplay or touching player data.
 public static class Idas3TsubakiSceneryChecks {
     const BindingFlags Hidden=BindingFlags.Instance|BindingFlags.NonPublic;
-    const string Output="Verification/tsubaki-clips-20260926";
+    static string Output{get{var args=Environment.GetCommandLineArgs();int at=Array.IndexOf(args,"-idas3-tsubaki-check-output");return at>=0&&at+1<args.Length?Path.GetFullPath(args[at+1]):"Verification/tsubaki-clips-20260926";}}
     static void Set(object o,string field,object value)=>o.GetType().GetField(field,Hidden).SetValue(o,value);
     static object Call(object o,string method,params object[] args)=>o.GetType().GetMethod(method,Hidden).Invoke(o,args);
     static void Check(bool ok,string message){if(!ok)throw new Exception(message);}
@@ -60,7 +60,8 @@ public static class Idas3TsubakiSceneryChecks {
         CaptureVariant("day_dry");
     }
     public static void WetBaseline(){CaptureVariant("day_wet");}
-    static void CaptureVariant(string variant){
+    public static void CollisionBoundary(){CaptureVariant("day_dry",true);}
+    static void CaptureVariant(string variant,bool collision=false){
         Directory.CreateDirectory(Output);
         bool baseline=Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-roadside-foliage-baseline")>=0;
         string shots=Path.Combine(Output,baseline?"baseline":"verified",variant);Directory.CreateDirectory(shots);
@@ -78,12 +79,39 @@ public static class Idas3TsubakiSceneryChecks {
         var data=JsonUtility.FromJson<Idas8HakoneCourse.Manifest>(File.ReadAllText(Path.Combine(folder,"scene.json")));Set(course,"data",data);
         var target=new RenderTexture(1280,540,24){antiAliasing=1};target.Create();camera.targetTexture=target;
         var image=new Texture2D(1280,540,TextureFormat.RGB24,false);var buffer=new ComputeBuffer(46,16);var old=RenderTexture.active;
+        Material edgeMaterial=null;GameObject edgeOverlay=null;
         try {
             Call(course,"LoadRoad");Call(course,"LoadScene");foreach(var t in scenery.GetComponentsInChildren<Transform>())t.gameObject.layer=28;
             var roads=(Vector3[][])typeof(Idas8HakoneCourse).GetField("roads",Hidden).GetValue(course);
+            if(collision){
+                // Draw the actual RCL wall vertices. Collision can have extra
+                // sections at rail endpoints and differ from the driving path.
+                Vector3[][] wallEdges;
+                using(var r=new BinaryReader(File.OpenRead("RuntimeAssets/TSUBAKI/tsubaki.rcl"))){
+                    Check(r.ReadUInt32()==0x52434c31u,"Unexpected collision format");r.BaseStream.Position=16;
+                    int count=r.ReadInt32(),offset=r.ReadInt32();Check(count%4==0,"Collision strip layout changed");
+                    wallEdges=new[]{new Vector3[count/4],new Vector3[count/4]};
+                    for(int p=0;p<count/4;p++){
+                        r.BaseStream.Position=offset+(p*4+1)*32L;var a=V(r);r.BaseStream.Position=offset+(p*4+2)*32L;var b=V(r);
+                        wallEdges[0][p]=a;wallEdges[1][p]=b;
+                    }
+                }
+                var report=new System.Text.StringBuilder("point,centerX,centerY,centerZ,edge1X,edge1Y,edge1Z,edge2X,edge2Y,edge2Z\n");
+                for(int p=3400;p<3900;p++){report.Append(p);for(int side=0;side<3;side++){var v=roads[side][p];report.AppendFormat(System.Globalization.CultureInfo.InvariantCulture,",{0},{1},{2}",v.x,v.y,v.z);}report.AppendLine();}
+                File.WriteAllText(Path.Combine(Output,"lower-hairpin-edges.csv"),report.ToString());
+                edgeMaterial=new Material(Shader.Find("Sprites/Default"));
+                edgeOverlay=new GameObject("Collision edges");edgeOverlay.transform.SetParent(scenery.transform,false);
+                for(int side=1;side<=2;side++){
+                    var lineObject=new GameObject("Source edge "+side);lineObject.layer=28;lineObject.transform.SetParent(edgeOverlay.transform,false);
+                    var line=lineObject.AddComponent<LineRenderer>();line.sharedMaterial=edgeMaterial;line.useWorldSpace=true;line.positionCount=wallEdges[side-1].Length;line.widthMultiplier=.10f;
+                    line.startColor=line.endColor=side==1?Color.magenta:Color.cyan;
+                    for(int p=0;p<line.positionCount;p++)line.SetPosition(p,wallEdges[side-1][p]+Vector3.up*.6f);
+                }
+                edgeOverlay.SetActive(false);
+            }
             foreach(bool reverse in new[]{false,true}){
             Set(course,"reverse",reverse);Call(course,"UpdateDirection");Set(course,"lightingProfile",-1);
-            foreach(int p in new[]{164,500,1500,2900,3300,3500,3600,3770}){
+            foreach(int p in collision?new[]{3500,3540,3550,3560,3570,3580,3590,3600,3610,3620,3630,3640,3660,3680,3700,3720,3740,3760,3780,3800}:new[]{164,500,1500,2900,3300,3500,3600,3770}){
                 var eye=roads[0][p]+Vector3.up*1.4f;var look=roads[0][p+(reverse?-18:18)]+Vector3.up*1.4f;
                 camera.transform.position=eye;camera.transform.LookAt(look);Call(course,"UpdateLighting",(float)p);Call(course,"UpdateScenery",eye);
                 foreach(var t in scenery.GetComponentsInChildren<Transform>()){var renderer=t.GetComponent<MeshRenderer>();if(renderer!=null&&renderer.sharedMaterial!=null&&renderer.sharedMaterial.GetFloat("_ImportedSky")==1)t.position=eye;}
@@ -93,9 +121,13 @@ public static class Idas3TsubakiSceneryChecks {
                 Shader.SetGlobalBuffer("_IdasFrameWords",buffer);Shader.SetGlobalInt("_IdasView",0);Shader.SetGlobalVector("_IdasDepthProjection",Vector4.zero);
                     camera.Render();RenderTexture.active=target;image.ReadPixels(new Rect(0,0,1280,540),0,0);image.Apply();
                     File.WriteAllBytes(Path.Combine(shots,$"point-{p}-{(reverse?"uphill":"downhill")}.png"),image.EncodeToPNG());
+                    if(collision){
+                        edgeOverlay.SetActive(true);camera.Render();RenderTexture.active=target;image.ReadPixels(new Rect(0,0,1280,540),0,0);image.Apply();
+                        File.WriteAllBytes(Path.Combine(shots,$"point-{p}-{(reverse?"uphill":"downhill")}-edges.png"),image.EncodeToPNG());edgeOverlay.SetActive(false);
+                    }
             }
             }
-        }finally{RenderTexture.active=old;camera.targetTexture=null;buffer.Dispose();target.Release();UnityEngine.Object.DestroyImmediate(image);UnityEngine.Object.DestroyImmediate(target);UnityEngine.Object.DestroyImmediate(scenery);UnityEngine.Object.DestroyImmediate(go);}
+        }finally{RenderTexture.active=old;camera.targetTexture=null;buffer.Dispose();target.Release();UnityEngine.Object.DestroyImmediate(image);UnityEngine.Object.DestroyImmediate(target);UnityEngine.Object.DestroyImmediate(scenery);UnityEngine.Object.DestroyImmediate(go);if(edgeMaterial!=null)UnityEngine.Object.DestroyImmediate(edgeMaterial);}
         Debug.Log("Tsubaki scenery captures complete");
     }
 }

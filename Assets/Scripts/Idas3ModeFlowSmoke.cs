@@ -486,7 +486,8 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
         if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-hud-drift-check")>=0){
             yield return Until(()=>host.Ready,600,"Scene initialized");yield return Frames(3);frozen=true;
             Check(Idas3SceneModeFlowFixture(-13)==1,"Live drift detector, contact gating and physics isolation");
-            Check(Idas3ArcadeHud.Read(out var telemetry)&&telemetry.version==3&&(telemetry.flags&8)!=0&&telemetry.driftOpacity>.99f,"Native graded drift telemetry reaches managed HUD");
+            Check(Idas3ArcadeHud.Read(out var telemetry)&&telemetry.version>=4&&(telemetry.flags&8)!=0&&telemetry.driftOpacity>.99f,"Native graded drift telemetry reaches managed HUD");
+            Check(((telemetry.flags>>16)&7)>=5&&((telemetry.flags>>16)&7)<=6,"Native HUD exposes the selected car's maximum gear");
             Check(Idas3ArcadeHud.DriftLevel(telemetry)<4,"Native drift grade reaches managed HUD");
             File.WriteAllText(Path.Combine(root,"drift-grades.txt"),Idas3MeterDriftChecks.RunChecks());
             Check(Idas3ArcadeHud.LampOpacity(new Idas3ArcadeHud.Telemetry{version=1,driftOpacity=1})==0,"Old telemetry cannot light drift lamp");
@@ -801,13 +802,13 @@ public sealed class Idas3ModeFlowSmoke : MonoBehaviour {
             foreach(string build in new[]{"0.3.93-replay-detail.1","0.3.94-player-replays.4","0.3.95-community-replays.0","0.3.95-other.99","invalid",null})Check(!Idas3CommunityTimes.SupportedBuild(build),"Older/unknown build rejected: "+build);
             foreach(string build in new[]{Application.version,"0.3.95-community-replays.2","0.3.95-community-replays.10","0.3.95","0.3.96","0.4.0"})Check(Idas3CommunityTimes.SupportedBuild(build),"Current/newer build accepted: "+build);
             Check(Application.version==Idas3CommunityTimes.RequiredSubmissionBuild&&Idas3CommunityTimes.SubmissionBuild(Application.version),"Current player exactly matches the upload release");
-            foreach(string build in new[]{"0.3.95-community-replays.1","0.3.95-community-replays.36","0.3.95-community-replays.38","0.3.96","0.4.0","0.3.95-community-replays.037","0.3.95-community-replays.37 ",null}){
+            foreach(string build in new[]{"0.3.95-community-replays.1","0.3.95-community-replays.36","0.3.95-community-replays.37","0.3.95-community-replays.39","0.3.96","0.4.0","0.3.95-community-replays.038","0.3.95-community-replays.38 ",null}){
                 var wrongBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));wrongBuild.build=build;
                 Check(!Idas3CommunityTimes.SubmissionBuild(build)&&!Idas3CommunityTimes.Uploadable(wrongBuild),"Only exact build can submit: "+build);
             }
             var previousBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));previousBuild.id=Guid.NewGuid().ToString();previousBuild.build="0.3.95-community-replays.36";
             previousBuild.ticks6000=60000;previousBuild.splits=new[]{20000,40000,60000,0};
-            var futureBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));futureBuild.id=Guid.NewGuid().ToString();futureBuild.build="0.3.95-community-replays.38";
+            var futureBuild=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));futureBuild.id=Guid.NewGuid().ToString();futureBuild.build="0.3.95-community-replays.39";
             var previousSeason=JsonUtility.FromJson<Idas3CommunityTimes.Run>(JsonUtility.ToJson(fresh));previousSeason.id=Guid.NewGuid().ToString();previousSeason.epoch=1;
             Check(!Idas3CommunityTimes.Uploadable(previousBuild)&&!Idas3CommunityTimes.Uploadable(previousSeason),"Old build and season queues cannot re-enter rankings");
             Check(Idas3CommunityTimes.Flatten(new Idas3CommunityTimes.Snapshot{ruleset=Idas3CommunityTimes.Ruleset,entries=new[]{old,imported}}).Length==28,"Existing leaderboard history remains readable");

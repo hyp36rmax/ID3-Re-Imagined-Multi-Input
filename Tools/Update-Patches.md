@@ -22,7 +22,7 @@ The updater accepts only a smaller, fully uploaded patch whose name matches both
 
 The installer does not remove unlisted files or include personal data. Existing saves, options, recordings, custom music and the user's `rom` folder are preserved. Neither changed-file updates nor Full Repair checks, replaces or repairs an original ROM. Startup performs the separate original-dump validation. Publish patches for all supported base versions; a version without a matching patch uses the full ZIP. Pre-.19 clients need one full update because their updater cannot read patches.
 
-The production updater stages ZIPs inside Unity and uses the bundled static native helper from `Tools/Updater`. Build the helper with `Tools/Build-UpdateInstaller.cmd` before building Unity. It needs neither PowerShell nor an external .NET installation. Wine drive mappings are allowed; links below drive roots are rejected. Windows DOS 8.3 paths are expanded before final-path comparison, so short names in TEMP or installation folders are not mistaken for links.
+The production updater stages ZIPs inside Unity and uses the bundled static native helper from `Tools/Updater`. Build the helper with `Tools/Build-UpdateInstaller.cmd` before building Unity. It needs neither PowerShell nor an external .NET installation. The running installation and OS temporary base directories are resolved to their actual Windows paths before deriving update paths, allowing installations reached through Steam-library or home-directory links. Wine drive mappings are allowed. Links inside the installation, `InitialDUpdates` cache root, sessions and archive contents are still rejected; archive entries are never resolved through links. Windows DOS 8.3 paths are expanded before final-path comparison, so short names in TEMP or installation folders are not mistaken for links.
 
 Validation:
 
@@ -33,8 +33,11 @@ python -X utf8 Tests/Updates/test_patch.py
 python -X utf8 Tests/Updates/test_rom_package.py
 python -X utf8 Tests/Updates/test_custom_music_package.py
 wsl -d Ubuntu -- xvfb-run -a python3 /path/to/repo/Tests/Updates/test_wine_installer.py
+python -X utf8 Tests/Updates/test_cache.py
 ```
 
 Unity: `Idas3IncrementalUpdateBuild.Build` runs release-selection checks and builds the isolated player. Run it with `-idas3-attract-options-smoke <fresh-output> -idas3-updates-check` to test modal/controller access and the patch/full retry state machine. The ordinary game folders are never test fixtures.
+
+For the complete Unity-to-helper Wine flow, build `Idas3MenuFontBuild.BuildDiagnostic`, then run `Tests/Updates/test_wine_unity_flow.py` under `xvfb-run` with `IDAS3_FLOW_EXPECT_FIXED=1` and `IDAS3_FLOW_TEST_OUTPUT` pointing to a fresh evidence folder. This uses its own Wine prefix, loopback download server and disposable installation. It exercises the real Unity download, staging, helper launch, shutdown and restart, including linked installation/TEMP paths, changed-file patches, damaged-file fallback and rejected links/checksums. This does not substitute for testing an affected player's Steam-managed Proton environment.
 
 ROM preservation checks should seed an isolated installation with a dummy `rom/gds-0033.chd` and the CUE/BIN filenames, apply both a full package and a patch, and verify their bytes and timestamps stay unchanged. Also verify that release inventory rejects ROM payloads before reading them, that the README is absent from patch manifests, and that neither full ZIPs nor patch ZIPs contain a `rom/` directory entry.

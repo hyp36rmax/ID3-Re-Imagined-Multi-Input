@@ -20,7 +20,9 @@
 <Compile Include="../../Assets/Scripts/Idas3GamepadInput.cs" />
 <Compile Include="../ControllerFoundation/PlatformStubs.cs" />
 
-<Compile Include="../DeviceSnapshots/InputSystemStubs.cs" /><Compile Include="Checks.cs" /><Compile Include="OwnershipChecks.cs" /><Compile Include="SetupChecks.cs" /><Compile Include="ControlsViewChecks.cs" /><Compile Include="MenuNavigationChecks.cs" />
+<Compile Include="../DeviceSnapshots/InputSystemStubs.cs" />
+<Compile Include="../../Assets/Scripts/Idas3ControllerReconnectChecks.cs" />
+<Compile Include="Checks.cs" /><Compile Include="OwnershipChecks.cs" /><Compile Include="SetupChecks.cs" /><Compile Include="ControlsViewChecks.cs" /><Compile Include="MenuNavigationChecks.cs" />
 <Compile Include="../../Assets/Scripts/Idas3ControllerSave.cs" />
 </ItemGroup>
 </Project>

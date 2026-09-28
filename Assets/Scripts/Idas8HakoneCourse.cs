@@ -10,7 +10,7 @@ public sealed partial class Idas8HakoneCourse : MonoBehaviour
 {
     public bool testBuild;
     [Serializable] public class Tex { public string file; public int uv, type; }
-    [Serializable] public class Surface { public string name,kind; public Tex[] textures; public float cutoff; public bool shadow, sky; }
+    [Serializable] public class Surface { public string name,kind; public Tex[] textures; public float cutoff; public bool shadow, sky; public uint diffuse; }
     [Serializable] public class Placement { public string kind; public int[] meshes; public float[] position,forward,angles; public float scale; }
     [Serializable] public class Lighting { public string name; public float[] sunDirection,fogColor; public float distanceScale; }
     [Serializable] public class LightingPoint { public float point; public int profile; }
@@ -130,6 +130,13 @@ public sealed partial class Idas8HakoneCourse : MonoBehaviour
             }
             m.SetFloat("_ImportedShadowOnly",s.textures.Length==1&&s.textures[0].type==6?1:0);
             if(s.shadow||(s.textures.Length==1&&s.textures[0].type==6)) { m.SetFloat("_SrcBlend",(float)BlendMode.SrcAlpha); m.SetFloat("_DstBlend",(float)BlendMode.OneMinusSrcAlpha); m.SetFloat("_ZWrite",0); m.renderQueue=950; }
+            if(s.shadow&&s.textures.Length==0){
+                // Tsubaki's wet roadside shadow has no texture. Its retained
+                // RGB diffuse is a multiplicative visibility value, not an
+                // opaque white strip from the shader's default texture.
+                m.SetColor("_ImportedUntexturedShadow",new Color(((s.diffuse>>16)&255)/255f,((s.diffuse>>8)&255)/255f,(s.diffuse&255)/255f,1));
+                m.SetFloat("_SrcBlend",(float)BlendMode.DstColor);m.SetFloat("_DstBlend",(float)BlendMode.Zero);
+            }
             if(s.sky) { m.SetFloat("_ZWrite",0); m.renderQueue=800; }
         }
         using(var r=new BinaryReader(File.OpenRead(Path.Combine(root,"scene.bin")))) {

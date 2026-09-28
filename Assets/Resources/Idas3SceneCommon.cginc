@@ -19,6 +19,7 @@
    float _ImportedSponsorSigns;
    float _ImportedCoverage,_ImportedCutoff,_ImportedHasShadow,_ImportedSky,_ImportedNight;
    float _ImportedShadowOnly,_ImportedShadowUv;
+   float4 _ImportedUntexturedShadow;
    float4 _ImportedSunDirection,_ImportedFogColor,_ImportedFogRange;
    #endif
    StructuredBuffer<float4> _IdasFrameWords;
@@ -234,6 +235,7 @@ void showroomGeometry(triangle P input[3],inout TriangleStream<P> stream){
 float4 mainPS(P v):SV_TARGET{
 #if defined(IDAS_IMPORTED_COURSE)
  float2 shadowUv=_ImportedShadowUv==0?v.uv:v.offsetColor.xy;
+ if(_ImportedUntexturedShadow.a>.5)return float4(_ImportedUntexturedShadow.rgb,1);
  // Sponsor panels are two-sided. Only tagged logo atlas tiles may reflect;
  // the screen-space U direction keeps lettering readable from either side.
  if(_ImportedSponsorSigns!=0&&v.sponsorAxis>0&&ddx(v.uv.x)<0)v.uv.x=v.sponsorAxis-v.uv.x;

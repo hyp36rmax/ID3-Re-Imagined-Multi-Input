@@ -86,7 +86,7 @@ int main(int argc,char** argv)try{
   trace<<frame<<','<<current.simulationTicks<<','<<current.speedMetresPerSecond<<','<<prior.speedMetresPerSecond<<','<<current.rpm<<','<<prior.rpm<<','<<packet.rangeCount<<','<<packet.vertexCount<<','<<packet.viewCount<<'\n';
  }
  check(maximumSpeed>10&&raceMeshes>1,"Scene did not preserve driving content");
- // The original mirror is a Legend bumper feature, not a TimeAttack feature.
+ // Also exercise the mirror after actual menu navigation into Legend.
  auto both=[&](unsigned key=0){
   for(auto& word:input.keys)word=0;if(key)set(key);
   check(step(&input)==1,"Legend scene step failed");token=refStep(&input);check(token>0,"Legend reference queue failed");callback(token);

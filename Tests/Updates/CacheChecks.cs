@@ -35,6 +35,13 @@ public static class CacheChecks {
     }
     public static int Main(string[] args) {
         fixtures=Path.GetFullPath(args[0]); Directory.CreateDirectory(fixtures);
+        string realBase=Path.Combine(fixtures,"real-base"),aliasBase=Path.Combine(fixtures,"selected-base");
+        Directory.CreateDirectory(realBase);Junction(aliasBase,realBase);
+        Check(string.Equals(Idas3UpdatePaths.ResolveDirectory(aliasBase),Idas3UpdatePaths.ResolveDirectory(realBase),StringComparison.OrdinalIgnoreCase),"selected base junction resolves to its actual directory");
+        Directory.CreateDirectory(Path.Combine(realBase,"game space 日本"));
+        Check(string.Equals(Idas3UpdatePaths.ResolveDirectory(Path.Combine(aliasBase,"game space 日本")),Path.Combine(Idas3UpdatePaths.ResolveDirectory(realBase),"game space 日本"),StringComparison.OrdinalIgnoreCase),"ancestor junction and Unicode installation path resolve correctly");
+        bool missingRejected=false;try{Idas3UpdatePaths.ResolveDirectory(Path.Combine(fixtures,"missing"));}catch(IOException){missingRejected=true;}
+        Check(missingRejected,"missing selected base rejected");
         string s=Session("safe");Payload(s);Safe(s);Clean(s);Check(!Directory.Exists(s),"confirmed safe payload removed immediately");
         s=Session("lease");Payload(s);using(Idas3UpdateCache.AcquireLease(s)){Safe(s);Clean(s);Check(File.Exists(Path.Combine(s,"game.zip")),"active lease protects even terminal status");}Clean(s);Check(!Directory.Exists(s),"released lease allows cleanup");
         s=Session("legacy-success");Payload(s);Plan(s,0,0);Write(s,"result.json","{\"passed\":true,\"changedFiles\":3}");Old(s);Clean(s);Check(!Directory.Exists(s),"old native success reclaimed");

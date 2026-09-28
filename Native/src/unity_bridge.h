@@ -87,7 +87,7 @@ typedef struct Idas3WheelState {
 } Idas3WheelState;
 // Read-only signals for optional host HUD themes. Does not change simulation.
 typedef struct Idas3HudTelemetry {
-    uint32_t size,version,flags; // flags: 1 race, 2 automatic, 4 night, 8 drift; v3 bits 8..9: blue/green/orange/red
+    uint32_t size,version,flags; // flags: 1 race, 2 automatic, 4 night, 8 drift; v3 bits 8..9: drift level; v4 bits 16..18: maximum gear
     int32_t gear;
     float speedKmh,rpm,revLimit,throttle,brake;
     float driftOpacity; // v2: 0..1, includes the release fade; same 40-byte ABI

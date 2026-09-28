@@ -209,6 +209,7 @@ public sealed class Idas3Updates : MonoBehaviour
             object next=null;Exception failure=null;bool more=false;
             try{more=routine.MoveNext();if(more)next=routine.Current;}catch(Exception error){failure=error;}
             if(failure!=null){
+                Debug.LogError("Game update failed during "+State+": "+failure);
                 (routine as IDisposable)?.Dispose();pendingInstallation=null;activeRequest=null;
                 if(usingPatch&&!cancelled&&failure is PatchUnavailableException){
                     SelectDownload(true);Message="Downloading the full update…";
@@ -221,9 +222,17 @@ public sealed class Idas3Updates : MonoBehaviour
             yield return next;
         }
     }
-    private IEnumerator DownloadAndInstall(){
-        string root=Path.GetFullPath(Path.Combine(Application.dataPath,".."));
+    internal IEnumerator DownloadAndInstall(string fixtureRoot=null){
+        string root=Path.GetFullPath(fixtureRoot??Path.Combine(Application.dataPath,".."));
+        if(fixtureRoot!=null&&!File.Exists(Path.Combine(Path.GetDirectoryName(root),"ISOLATED_UPDATE_TEST.txt")))
+            throw new IOException("Updater diagnostics require an isolated fixture.");
         if(Application.isEditor||!File.Exists(Path.Combine(root,"InitialDUnity.exe")))throw new IOException("Run the Windows game to install updates.");
+        // Wine/Proton installations can be launched through Steam-library or
+        // home-directory aliases. Resolve the real base spelling before deriving
+        // any paths; links within the game's contents remain prohibited.
+        root=Idas3UpdatePaths.ResolveDirectory(root);
+        Idas3UpdateStaging.NoLinks(root);
+        Debug.Log("Game update installation folder: "+root);
         // Check access before downloading. Never request elevation or alter ACLs.
         string probe=Path.Combine(root,".update-write-check-"+Guid.NewGuid().ToString("N"));
         using(var stream=new FileStream(probe,FileMode.CreateNew,FileAccess.Write,FileShare.None,1,FileOptions.DeleteOnClose)){}

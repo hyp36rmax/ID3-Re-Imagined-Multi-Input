@@ -39,6 +39,7 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
     private GUIStyle titleStyle,label,small,artistStyle,button,stageButton,numberStyle,confirmationStyle,songStyle;
     private GUIStyle searchStyle;
     private Font uiFont;
+    internal Font DiagnosticFont=>uiFont;
     private string query="",collectionFilter="",preferencesPath;
     private bool favoritesOnly,sortByTitle,clearSearchFocus;
     private readonly HashSet<string> favorites=new HashSet<string>();
@@ -179,7 +180,8 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
     private void OnDestroy()
     {
         StopPreview();foreach(var cover in covers.Values)if(cover!=null)Destroy(cover);
-        if(uiFont!=null)Destroy(uiFont);
+        // Resources owns the shared font, including its runtime glyph atlas.
+        // Closing/recreating this menu must not destroy it for the next instance.
         if(IsOpen){Cursor.lockState=previousCursorLock;Cursor.visible=previousCursorVisible;}
     }
     public void RequestDiagnosticCapture(RenderTexture target)
@@ -191,7 +193,13 @@ public sealed class Idas3RaceMusicMenu : MonoBehaviour
     private void Styles()
     {
         if(label!=null)return;
-        uiFont=Font.CreateDynamicFontFromOSFont(new[]{"Segoe UI","Yu Gothic UI","Noto Sans CJK JP","Arial","DejaVu Sans"},18);
+        // Windows font families may not exist in a clean Wine/Proton prefix.
+        // Ship the Japanese/Latin glyph data instead of relying on OS fallback.
+        uiFont=Resources.Load<Font>("Fonts/NotoSansJP-Regular");
+        if(uiFont==null){
+            Debug.LogError("Sound Room's bundled font is missing; using the built-in fallback.");
+            uiFont=Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+        }
         label=new GUIStyle(GUI.skin.label){font=uiFont,fontSize=18,padding=new RectOffset(0,0,0,0),clipping=TextClipping.Clip};label.normal.textColor=White;
         small=new GUIStyle(label){fontSize=12};artistStyle=new GUIStyle(label){fontSize=13};
         titleStyle=new GUIStyle(label){fontSize=35,fontStyle=FontStyle.BoldAndItalic};

@@ -14,6 +14,11 @@ static class Checks {
     static AxisControl Axis(InputDevice d)=>(AxisControl)d.allControls[0];
     static Idas3EndpointSnapshot Endpoint(Idas3ControllerDevices p,int id)=>p.Snapshot.Endpoints.Last(e=>e.Identity.Fields.Any(f=>f.Name=="runtimeId"&&f.Value==id.ToString()));
     static void Main(){
+        if (Array.IndexOf(Environment.GetCommandLineArgs(), "-idas3-reconnect-check-output") >= 0)
+        {
+            Idas3ControllerReconnectChecks.Run();
+            return;
+        }
         string root=Path.Combine(Path.GetTempPath(),"id3-multi-"+Guid.NewGuid().ToString("N"));
         try{
             var wheel=Device(1,"Driver wheel name",0);var gas=Device(2,"Pedals via USB",1);var brake=Device(3,"Identical path",-1);var up=Device(4,"Shifter",0,true);var down=Device(5,"Shifter 2",0,true);

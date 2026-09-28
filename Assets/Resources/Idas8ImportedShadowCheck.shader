@@ -5,6 +5,7 @@ Shader "Hidden/IDAS3/Imported Shadow Check" {
   _ImportedShadowTex("Visibility",2D)="white"{}
   _ImportedHasShadow("Baked shadow",Float)=0
   _ImportedShadowOnly("Overlay",Float)=0
+  _ImportedUntexturedShadow("Untextured shadow visibility",Color)=(0,0,0,0)
   _ImportedShadowUv("UV set",Float)=1
   _ImportedSky("Skip lighting and fog",Float)=1
   _SrcBlend("Source",Float)=1

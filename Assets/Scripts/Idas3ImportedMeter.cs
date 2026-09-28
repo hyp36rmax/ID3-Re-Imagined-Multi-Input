@@ -123,6 +123,12 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
     }
     // Recovered WBP_SpeedMeter_Base.GetSpeedColor compares <90, <150, <210.
     internal static int SpeedColorBand(float speed)=>Safe(speed)<90?0:speed<150?1:speed<210?2:3;
+    internal static int GearDigit(Layer layer,Idas3ArcadeHud.Telemetry t){
+        // Infinity's eighth atlas cell is the ordinary silver 5. Its gold 5
+        // is reserved for five-speed cars; six-speed cars highlight only 6.
+        bool infinity=Contains(layer.texture,"_Meter01_ShiftNum")||Contains(layer.texture,"_Meter12_ShiftNum")||Contains(layer.texture,"_Meter13_ShiftNum");
+        return infinity&&t.gear==5&&t.version>=4&&((t.flags>>16)&7)==6?7:Mathf.Clamp(t.gear,0,6);
+    }
     static int Digit(string role,Idas3ArcadeHud.Telemetry t){
         int speed=Mathf.Clamp(Mathf.FloorToInt(Safe(t.speedKmh)),0,999),rpm=Mathf.Clamp(Mathf.FloorToInt(Safe(t.rpm)),0,19999);
         switch(role){case "gear":case "gearEffect":return Mathf.Clamp(t.gear,0,6);case "speed100":return speed>=100?speed/100:10;
@@ -226,7 +232,7 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
             if(meter.id==42&&layer.name.StartsWith("SpeedRate",StringComparison.Ordinal)&&!speedColor)color=new Color(.08f,.08f,.08f,color.a);
             // The fourth atlas is neutral for the animated rainbow. Drive its
             // hue from presentation time so pausing/seeking and FPS stay stable.
-            if((speedColor||tintSpeed)&&SpeedColorBand(data.speedKmh)==3)
+            if((speedColor&&!layer.speedPalette||tintSpeed)&&SpeedColorBand(data.speedKmh)==3)
                 color*=Color.HSVToRGB(Mathf.Repeat(Safe(seconds)*.5f,1),.85f,1);
             // Reuse the authored gauge colors. Their vector alpha is commonly
             // zero and is not widget opacity. Circle01's RGB emission survived
@@ -306,6 +312,7 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
             var uv=layer.uv!=null&&layer.uv.Length==4?new Rect(layer.uv[0],layer.uv[1],layer.uv[2],layer.uv[3]):new Rect(0,0,1,1);
             if(led)uv=ledUv;
             int digit=Digit(role,data);
+            if(role=="gear"||role=="gearEffect")digit=GearDigit(layer,data);
             if((role=="gearRoll"||role=="gearEffect")&&animatedIndex>=0){
                 // Metallic animates its blur atlas independently of the live
                 // gear digit. Its Index passes the seven-cell boundary while
@@ -361,6 +368,14 @@ internal sealed partial class Idas3ImportedMeter : IDisposable
             var sprite=new Idas3ArcadeHud.Sprite{texture=texture,rect=new Rect(0,0,layer.width,layer.height),uv=uv,color=color,fill=-1,additive=additive,
                 transformed=true,transform=matrix,gaugeMode=gaugeMode,gauge=gauge,clipped=clipped,clip=clip,mask=mask,maskTransform=maskTransform,radial=radial};
             ApplySeason5Material(ref sprite,layer,data,seconds,percentage,options.hudShiftLights);
+            if(layer.speedPalette){
+                int band=SpeedColorBand(data.speedKmh);
+                sprite.materialEffect=17;
+                // Preserve the source yellow band and its beveled white/dark
+                // details. The shader recolors only the chromatic component.
+                sprite.effectParams.x=band==1?0:1;
+                sprite.effectColor1=band==0?new Color(1,.02f,.02f):band==2?new Color(.02f,.66f,1):Color.HSVToRGB(Mathf.Repeat(seconds*.5f,1),.85f,1);
+            }
             if(Contains(layer.materialParent,"M_Add_Ball")){
                 sprite.materialEffect=1;
                 sprite.effectParams=new Vector4(Scalar(layer,"S Radius",.2f),Scalar(layer,"M Radius",.3f),Scalar(layer,"L Radius",.5f),Scalar(layer,"Diamond",5));

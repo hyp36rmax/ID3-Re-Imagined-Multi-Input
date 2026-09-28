@@ -2,6 +2,23 @@
 
 ## Unreleased
 
+## 0.3.95-community-replays.38 - September 27, 2026
+
+This update is required to submit new community Time Attack times.
+
+- Enabled the rear-view mirror in Time Attack, Legend of the Streets, Bunta Challenge and online races with bumper, chase and natural cameras. Time Attack uses the same mirror frame and HUD position/size controls.
+- Aligned Tsubaki Line's lower-hairpin collision with both visible guardrails, removing an invisible wall that cut into the approach and preventing the car from passing through the opposite rail. Corrected the rail endpoints in both directions and all weather/time conditions.
+- Saved wheel, pedal and shifter bindings now work together across separate devices. Keyboard-only and gamepad selection remain independent, and reconnecting held controls must be released before they activate.
+- Restored red/yellow/blue/rainbow speed digits on legacy tachometer families whose imported color textures were identical. Infinity now uses its silver fifth-gear digit on six-speed cars and reserves gold for the highest gear.
+- Fixed the solid white roadside strip in wet Tsubaki Line: its untextured shadow now darkens the underlying road instead of covering it with white.
+- Fixed blank Sound Room text on Wine/Proton installations without the expected system fonts. The game now includes its own Japanese/Latin font for song titles, controls and search.
+- Fixed automatic updates failing when the installation or system temporary folder is reached through a directory link. The updater now resolves those base folders before staging, while still rejecting links inside update contents. Update failures also include their underlying error in the player log.
+- Fixed controller recovery getting stuck in online menus when the active device disconnects or changes slots. Reconnecting with a held trigger, stick or pedal now guards that control individually instead of blocking the entire controller; fresh controls and keyboard input remain available.
+
+Fanatec binding and controller fixes have passed synthetic device checks; confirmation on affected physical hardware is still needed. Wine updater and font checks passed; affected Steam/Proton installations still need player confirmation.
+
+Changed-file patches support `.20` through `.37`. Existing leaderboard records, season 2, saves, settings, replays, custom music and original ROM files are preserved. Both online players need this version. A verified original GDS-0033 dump is still required and is not included.
+
 ## 0.3.95-community-replays.37 - September 27, 2026
 
 This update is required to submit new community Time Attack times.

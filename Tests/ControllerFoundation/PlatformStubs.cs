@@ -37,3 +37,12 @@ public static class Mathf{public static int RoundToInt(float value)=>(int)System
 public static class Idas3FramePacing{public static void Configure(bool v,int n){}}
 public static class Idas3ArcadeMeterCatalog{public static bool IsValidStyle(int n)=>n>=0;}
 public static class Idas3OrnamentCatalog{public static bool IsValid(int n)=>n>=0;}
+
+namespace UnityEngine
+{
+    public static class Debug
+    {
+        public static void Log(object message) => System.Console.WriteLine(message);
+        public static void LogWarning(object message) => System.Console.WriteLine(message);
+    }
+}

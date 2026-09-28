@@ -14,6 +14,7 @@ Shader "IDAS3/Original Scene Material"
   _ImportedCutoff("Imported alpha cutoff",Float)=0
   _ImportedHasShadow("Imported road shadow enabled",Float)=0
   _ImportedShadowOnly("Imported shadow overlay",Float)=0
+  _ImportedUntexturedShadow("Untextured shadow visibility",Color)=(0,0,0,0)
   _ImportedShadowUv("Imported shadow UV set",Float)=1
   _ImportedSky("Imported sky",Float)=0
   _ImportedNight("Imported night scenery",Float)=0

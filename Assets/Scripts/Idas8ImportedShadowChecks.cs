@@ -64,6 +64,14 @@ internal static class Idas8ImportedShadowChecks {
                     }
                 }finally{UnityEngine.Object.Destroy(mask);}
             }
+            m.SetColor("_ImportedUntexturedShadow",new Color(127/255f,127/255f,127/255f,1));
+            m.SetFloat("_SrcBlend",(float)BlendMode.DstColor);m.SetFloat("_DstBlend",(float)BlendMode.Zero);
+            foreach(var background in new[]{Color.white,new Color(.2f,.5f,.8f)}){
+                commands.Clear();commands.SetRenderTarget(target);commands.SetViewport(new Rect(0,0,64,64));commands.ClearRenderTarget(true,true,background);
+                commands.SetViewProjectionMatrices(Matrix4x4.identity,Matrix4x4.identity);commands.DrawMesh(mesh,Matrix4x4.identity,m,0,0);Graphics.ExecuteCommandBuffer(commands);
+                RenderTexture.active=target;pixels.ReadPixels(new Rect(0,0,64,64),0,0);pixels.Apply();var actual=pixels.GetPixel(32,32);
+                check(Mathf.Abs(actual.r-background.r*127/255f)<.02f&&Mathf.Abs(actual.g-background.g*127/255f)<.02f&&Mathf.Abs(actual.b-background.b*127/255f)<.02f,"Untextured wet shadow must darken the existing road without painting an opaque strip");
+            }
         }finally{
             RenderTexture.active=old;target.Release();commands.Dispose();
             UnityEngine.Object.Destroy(target);UnityEngine.Object.Destroy(pixels);UnityEngine.Object.Destroy(mesh);UnityEngine.Object.Destroy(m);

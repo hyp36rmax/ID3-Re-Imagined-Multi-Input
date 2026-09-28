@@ -157,6 +157,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
             diagnostic = controllerDeviceDiagnostic || diagnostic;
             if (controllerDeviceDiagnostic) controllerDevices = Idas3ControllerDevicesSmoke.CreateProvider();
             diagnostic = Idas3OnlineControllerSmoke.Configure(ref saves) || diagnostic;
+            controllerDevices = Idas3OnlineControllerSmoke.IsolatedProvider() ?? controllerDevices;
             diagnostic = Idas3RaceMusicSmoke.Configure(ref saves) || diagnostic;
             diagnostic = Idas3AttractOptionsSmoke.Configure(ref saves) || diagnostic;
             diagnosticMode = diagnostic || (importedTest && (Array.IndexOf(Environment.GetCommandLineArgs(),"-hakone-smoke")>=0||Array.IndexOf(Environment.GetCommandLineArgs(),"-hakone-menu-smoke")>=0));
@@ -618,6 +619,7 @@ public sealed class Idas3SceneGame : MonoBehaviour
     {
         wheelFeedback?.Stop();
         if (controlBindings == null||controlBindings.ExperimentalInUse) return;
+        Debug.Log("IDAS3 controller input source: "+controllerDevices.ActiveName+"; profile="+controllerDevices.ActiveProfileKey);
         controlBindings.SelectControllerProfile(controllerDevices.ActiveProfileKey,
             controllerDevices.ActiveName, controllerDevices.ActiveIsGeneric);
         controlBindings.ControllerDeviceChanged();

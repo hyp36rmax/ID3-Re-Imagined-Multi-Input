@@ -15,6 +15,7 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
 {
     private static string pendingRoot;
     private static bool pendingSteam,pendingRequirePhysical;
+    private static bool InputOnly=>Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-input-check-no-captures")>=0;
     private static int pendingPhysicalSlot=-1;
     private static Idas3OnlineControllerSmoke active;
     private Idas3SceneGame host;
@@ -95,6 +96,13 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
         active.host=game;active.root=pendingRoot;active.steam=pendingSteam;active.requirePhysical=pendingRequirePhysical;active.physicalSlot=pendingPhysicalSlot;active.began=Time.realtimeSinceStartupAsDouble;
         active.StartCoroutine(active.Guard(active.Run()));
     }
+    internal static Idas3ControllerDevices IsolatedProvider()
+    {
+        if(pendingRoot==null||pendingSteam||pendingRequirePhysical)return null;
+        uint NoXInput(uint slot,out Idas3Native.PadState state){state=default;return 1167;}
+        return new Idas3ControllerDevices(()=>Time.realtimeSinceStartupAsDouble,NoXInput,
+            device=>device.description.manufacturer=="Private input test");
+    }
     internal static void PreparePhysicalInput(ref Func<KeyCode,bool> key)
     {if(active!=null&&!active.finished)key=active.KeyHeld;}
     private bool KeyHeld(KeyCode key)=>physicalKey!=KeyCode.None&&key==physicalKey;
@@ -131,6 +139,33 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
     private void Pad(float throttle=0,float x=0)
     {if(gamepad!=null)InputSystem.QueueStateEvent(gamepad,new GamepadState{rightTrigger=throttle,leftStick=new Vector2(x,0)});}
     private IEnumerator Button(GamepadButton button){InputSystem.QueueStateEvent(gamepad,new GamepadState().WithButton(button));yield return Frames(3);Pad();yield return Frames(3);}
+    private IEnumerator ReconnectControls()
+    {
+        Pad();yield return Frames(5);Check(host.ControllerDevices.Select("automatic"),"Could not select Automatic for recovery check");
+        menu.SetOpen(true);yield return Frames(4);
+        InputSystem.RemoveDevice(gamepad);gamepad=null;yield return Frames(5);
+        Check(!host.ControllerDevices.TryRead(out _),"Removed test pad retained a stale connection");
+        var replacement=Description;replacement.serial="online-input-replacement";
+        gamepad=(Gamepad)InputSystem.AddDevice(replacement);
+        InputSystem.QueueStateEvent(gamepad,new GamepadState{rightTrigger=.6f}.WithButton(GamepadButton.South));yield return Frames(6);
+        Check(host.ControllerDevices.TryRead(out _)&&menu.IsOpen,"Open online menu failed to recover a replacement pad safely");
+        profile=host.ControllerDevices.ActiveProfileKey;
+        Pad(.6f);yield return Frames(3);
+        InputSystem.QueueStateEvent(gamepad,new GamepadState{rightTrigger=.6f}.WithButton(GamepadButton.East));yield return Frames(4);
+        Pad(.6f);yield return Frames(5);
+        Check(!menu.IsOpen&&!menu.BlocksGameInput,"Held throttle prevented fresh B from closing the online menu");
+        Pad();yield return Frames(4);Pad(.6f,-.35f);yield return Frames(5);CheckDriving("menu-reconnect-recovered",153,-11469);
+        InputSystem.RemoveDevice(gamepad);gamepad=null;yield return Frames(3);
+        gamepad=(Gamepad)InputSystem.AddDevice(replacement);Pad(.6f,-.35f);yield return Frames(6);
+        profile=host.ControllerDevices.ActiveProfileKey;
+        Check(host.DiagnosticSubmittedInput.rightTrigger==0&&host.DiagnosticSubmittedInput.thumbLX==0,"Reconnect replayed already-held driving controls");
+        Pad(0,-.35f);yield return Frames(3);Pad(.3f,-.35f);yield return Frames(4);
+        CheckDriving("throttle-recovers-with-steering-held",77,0);
+        InputSystem.QueueStateEvent(gamepad,new GamepadState{rightTrigger=.3f,leftTrigger=.4f,leftStick=new Vector2(-.35f,0)});yield return Frames(4);
+        Check(Math.Abs((int)host.DiagnosticSubmittedInput.leftTrigger-102)<=1,"Held steering blocked fresh brake input during the native race");
+        Pad(.3f);yield return Frames(3);Pad(.3f,.2f);yield return Frames(4);CheckDriving("race-reconnect-recovered",77,6553);
+        Pad();yield return Frames(3);
+    }
     private IEnumerator FocusAction(string suffix){
         for(int i=0;i<120&&(menu.ControllerSelection==null||!menu.ControllerSelection.EndsWith(suffix,StringComparison.Ordinal));++i)yield return Button(GamepadButton.DpadDown);
         Check(menu.ControllerSelection!=null&&menu.ControllerSelection.EndsWith(suffix,StringComparison.Ordinal),"Controller cannot reach "+suffix);
@@ -330,7 +365,10 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
             physicalKey=KeyCode.None;Pad(.6f,-.35f);yield return Frames(5);
         }
         CensusInputs("after-online-close-recovery");CheckPhysicalEndpoints("after-online-close-recovery");Check(!host.MultiplayerSession.InLobby&&!host.MultiplayerSession.IsRacing,"Diagnostic unexpectedly entered an online room/race");
-        if(physicalSlot<0&&!steam){yield return ControllerMenus();if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-online-menu-screens")>=0)yield return Idas3.Multiplayer.Idas3OnlineMenuScreens.Run(root);yield return WheelMenus();}
+        if(physicalSlot<0&&!steam){
+            yield return ReconnectControls();
+            if(!InputOnly){yield return ControllerMenus();if(Array.IndexOf(Environment.GetCommandLineArgs(),"-idas3-online-menu-screens")>=0)yield return Idas3.Multiplayer.Idas3OnlineMenuScreens.Run(root);yield return WheelMenus();}
+        }
         Pad();yield return Frames(3);Observe("complete");Finish(true,null);
     }
     private void Finish(bool passed,string error)
@@ -343,7 +381,9 @@ public sealed class Idas3OnlineControllerSmoke : MonoBehaviour
             observations=observations.ToArray(),censuses=censuses.ToArray(),endpointChecks=endpointChecks.ToArray(),scope=(physicalSlot>=0?
                 "Private actual Unity player using the selected physical XInput slot. Live raw-to-native pad connection, throttle and steering are compared before/after F1; no physical input is fabricated or assumed nonzero. ":
                 "Private actual Unity player. Synthetic Gamepad events pass through the real provider/bindings/native input; held and fresh analog inputs are compared after closing. ")+
-                "F1, Escape and programmatic close paths plus keyboard recovery. Synthetic LAN run uses the explicit diagnostic focus override, then tests Select/A/B navigation, on-screen code entry, empty local room hosting/leaving and settings categories. No peer or public matchmaking. Explicit Steam/physical modes require real foreground focus and do not host rooms. When requirePhysical is true, every baseline connected DLL/slot must remain connected after five-second settling and each close; values may change."},true));
+                "F1, Escape and programmatic close paths plus keyboard recovery. Synthetic LAN run uses the explicit diagnostic focus override and isolated device discovery, then tests replacement-device recovery in an open online menu and independent analog release during the native race. "+
+                (InputOnly?"Input-only run; no UI rendering or on-screen navigation claim. ":"Also tests Select/A/B navigation, on-screen code entry, empty local room hosting/leaving and settings categories. ")+
+                "No peer or public matchmaking. Explicit Steam/physical modes require real foreground focus and do not host rooms. When requirePhysical is true, every baseline connected DLL/slot must remain connected after five-second settling and each close; values may change."},true));
         Debug.Log((passed?"PASS":"FAIL")+" online controller recovery "+error);
 #if UNITY_EDITOR
         UnityEditor.EditorApplication.isPlaying=false;

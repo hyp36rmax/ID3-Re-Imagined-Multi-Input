@@ -10,8 +10,9 @@ using UnityEngine.InputSystem.HID;
 using UnityEngine.InputSystem.XInput;
 
 // Device discovery/selection is separate from action bindings and native input
-// response. A selected missing device stays selected; it cannot fall through
-// to a different controller. Only Automatic may change the input source.
+// response. Explicit preferences survive temporary fallback; a live menu
+// source stays locked, while disconnected sources permit recovery. Snapshots
+// retain separate session endpoints regardless of active-device selection.
 public sealed partial class Idas3ControllerDevices : IDisposable
 {
     public sealed class DeviceChoice
@@ -229,8 +230,8 @@ public sealed partial class Idas3ControllerDevices : IDisposable
             if (resumed != null && resumed.choice.connected && resumed.profile == automaticResume.profile)
                 SetActive(resumed);
         }
-        if (preference.key == "automatic" && allowAutoSwitch)
-            SetActive(activity ?? active ?? FirstConnected());
+        if (preference.key == "automatic")
+            SetActive(allowAutoSwitch ? activity ?? active ?? FirstConnected() : active ?? FirstConnected());
         if (dirty) { RebuildChoices(); dirty = false; }
         PublishSnapshots(time,Idas3SnapshotKind.Poll);
     }
@@ -360,7 +361,9 @@ public sealed partial class Idas3ControllerDevices : IDisposable
             device.controls.Add(new Idas3ControllerControl { path = path, label = name, minimum = minimum, maximum = maximum, button = button });
             device.axes.Add(axis);
         }
-        device.activityBaseline = new float[device.controls.Count]; return device;
+        device.activityBaseline = new float[device.controls.Count];
+        if(device.generic)Debug.Log("IDAS3 HID input: "+device.choice.label+"; usable controls="+device.controls.Count+"; descriptor filtered="+device.descriptorControls+"; VID="+device.vendorId.ToString("X4")+" PID="+device.productId.ToString("X4"));
+        return device;
     }
     private static HID.HIDElementDescriptor[] AutoHidInputElements(InputDevice input)
     {
