@@ -53,6 +53,8 @@ Capture and Test Inputs consume their samples before gameplay/native submission.
 
 ## Build and evidence
 
+The 2026-09-28 follow-up below supersedes the historical counts and review boundary in this section.
+
 Run `python Tools/CI/Run-Portable.py` with Python 3.11+, .NET 8 and a C++ compiler. The local run passed 215 multi-input/setup/view checks, 101 provider/snapshot checks, 57 Controller checks, 46 UAT and 34 diagnostic checks, native JSON/access checks and 9 packaging cases. It compiles actual binding/setup/view code against headless adapters, exercises persistence, and retains logs under `Verification/ci/portable`. Headless GUI adapters test commands, all-action inventory, no-scroll use and scaled bounds, not pixel rendering. Unity editor checks in `Idas3ControllerFoundationChecks` and `Idas3MultiInputChecks` use the real module adapter; stale pre-unification row-number navigation was removed. They remain unexecuted here and are invoked by the full-game builder.
 
 On the owner's already activated Windows machine, use a **new full checkout of the reviewed follow-up commit**, with the same successful toolchain as the baseline. Close Unity, then run from that checkout:
@@ -87,3 +89,75 @@ Started clean on `ID3-Multi-device-input` at `048cec11616dbf088c9ced9707f746c22b
 Already satisfied before this follow-up: five unified tabs, live evaluated Test Inputs, preserved original configuration, scoped saving/partial-failure handling, driver-name preservation, and FFB protection. Changes here complete the immediate mixed-source setup flow, steering-type substeps, compact binding groups, exclusive menu ownership and current Unity batch-check entry points. No persistent reconnect matching or multi-input force output was added.
 
 This machine remains macOS ARM without Unity; no Windows execution connection is available. The owner's successful baseline build/local Hub activation is retained as evidence, not confused with the unavailable hosted activation route. The immediate owner action is to import the review bundle into a separate worktree and run the existing Windows game build script. Build/launch logs and real screenshots—not this source review—must establish the corrected runnable sample.
+
+
+## Hardware follow-up acceptance (2026-09-28)
+
+Assignment activation now starts capture directly. Clear Slot and Cancel are in
+that capture view. A same-context conflict asks “Already assigned to [action].
+Replace this assignment?” Replace commits the replacement to the draft; Cancel
+preserves both assignments. Save Changes remains the persistence boundary.
+Separate wheel keyboard assignments shadow original keys only while that setup
+is active; they do not rewrite the original keyboard profile. Driving/Menu reuse
+and opposite signed axis directions remain legal.
+
+Capture rejects simultaneous candidates and requires the entire hat to return to
+neutral after a diagonal. This fixes a reproducible enumeration-dependent capture
+case; the owner's exact DD2 raw reports remain unobserved. Direction labels follow
+Unity's decoded Dpad children, with the original endpoint/control path retained.
+Runtime diagonal navigation retains deterministic vertical priority and one event
+per neutral-to-direction excursion; diagonal capture does not choose a cardinal.
+
+Other Inputs consumes existing snapshots and sampled keys without another polling
+loop. It shows assigned and unassigned activity together, up to six visible items,
+with an overflow count and 0.6-second release indication. Analog hysteresis filters
+small movement. Leave unassigned axes at rest when entering Test Inputs so their
+rest can be sampled. Full driver names remain in Devices/evidence; compact activity
+labels shorten long names without inferring hardware identity. No accessible
+OutRun reference was supplied, and no OutRun files were modified.
+
+Retest after review/publication and a successful full Windows build:
+
+1. Select a Driving assignment and confirm: capture must open immediately. Keep
+   the opening key/button/assigned menu axis held: it must not bind itself. Release,
+   then bind. Try Clear Slot, Escape and pointer Cancel; unrelated slots must stay.
+2. Assign a key/button already used by another Driving action. Cancel the conflict
+   and verify both slots; repeat with Replace and verify only the conflicting slot
+   clears. Repeat for Menu. Cancel with the source disconnected; no partial change
+   may survive. Discard must restore saved state, including original keyboard data.
+3. Bind steering left/right separately under Menu; reuse the Driving axis. Bind a
+   deliberately selected pedal at its released rest (including maximum-rest pedals).
+   Default activation is 75%; release below 40% before another event. Hold inputs
+   while entering/capturing/leaving: no extra navigation or confirmation may occur.
+4. Capture all four POV cardinals, checking displayed direction and resulting event.
+   Attempt each diagonal, then settle on one direction without neutral: no binding
+   may be accepted. Fully release and retry a cardinal. Record raw report, path,
+   label, current DD2 mode and driver version if direction still differs.
+5. On Test Inputs, hold steering, pedals, shifts and an unassigned button together;
+   press Enter. Evaluated bars and Other Inputs must update without gameplay/menu
+   actions. Release indicators should clear shortly; resting axes should be quiet.
+   Disconnect, focus away and return; stale activity must disappear. Escape/pointer
+   must remain usable. Check long labels and the six-item limit in the rendered UI.
+6. Save, switch back to the saved controller setup and inspect its original mappings.
+   Repeat Discard and setup cancellation with an unrelated audio draft pending.
+   Reconnect/restart still needs explicit reassignment; no persistent matching is claimed.
+
+Multi-input FFB remains disabled. The current interface lacks separate output-free
+initialization acknowledgement and an independently owned, acknowledged test-pulse
+contract. New Re-detect/Test Left/Test Right/Stop controls are not delivered or
+claimed validated. See [the FFB audit](FFB_HARDWARE_FOLLOWUP.md) for exact existing
+protections, proposed interface extension and DD2 evidence needed. Existing status
+now says queued/driver-accepted request, with physical output explicitly unverified.
+
+Portable validation: 287 multi-input checks, 96 provider/snapshot checks, 57 Controller,
+46 UAT, 34 diagnostic, nine packaging cases, native JSON/access checks and the new
+671-check fake-backend FFB owner suite. Counts include repeated mailbox checks, not
+671 independent hardware scenarios. Unity raw Gamepad/HID hat fixtures were added;
+their actual Unity execution, player compilation, rendering and DD2 hardware results
+remain pending. This host has no Unity editor or accessible Windows executor.
+
+Build a complete checkout of the final reviewed commit using the activated Windows
+editor and the full-game command above, without `-ReuseNative`. Preserve the owner's
+existing DLL/ProjectSettings changes in the old checkout; do not copy generated DLLs
+into the new build. The ZIP and native/game logs are produced only by a successful
+Windows run. Local source/test commits alone are not a runnable package.

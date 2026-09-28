@@ -170,7 +170,7 @@ public sealed class Idas3WheelFeedback : IDisposable
         try{
             sendingDevice=selected;
             if(!backend.Send(selected,request)){string error=backend.Status;Stop();retryAt=now+1;StatusText=error;return;}
-            sending=true;lastSendAt=now;StatusText="Feedback active — cabinet board: torque, centring, damper and rumble.";
+            sending=true;lastSendAt=now;StatusText=backend is QueuedBackend ? "Feedback request queued; physical output unverified." : "Driver accepted feedback request; physical output unverified.";
         }catch(Exception error){Stop();retryAt=now+1;StatusText="Wheel feedback unavailable: "+error.Message;}
     }
     public void Stop(){

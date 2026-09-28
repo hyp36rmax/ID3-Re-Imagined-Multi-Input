@@ -215,3 +215,33 @@ Portable follow-up checks cover keyboard Replace/Cancel, original-file protectio
 Kept immediate evaluated Steering, Gas, Brake and shift indicators, and added a bounded Other Inputs area. It consumes immutable provider frames and keys already sampled by the mapper, including unassigned inputs and simultaneous devices; it does not poll hardware or emit actions. Active items sort before briefly released items, six rows are visible with an overflow count, and disconnected/stale/focus-lost inputs disappear. Known assignments use existing axis rest calibration; unassigned axes establish rest on entry and use hysteresis to filter noise. Full driver names remain in the data/Devices page while activity rows shorten the device portion so the control name stays visible. No model identity is inferred.
 
 Thirteen additional portable checks pass for simultaneous assigned/unassigned activity, Enter, analog rest/noise, release expiry, driver/control labels, stale samples, focus, disconnect/reconnect and no persistence. Focused suite now passes 260 checks. Test Inputs remains isolated by the existing host path with pointer/Escape recovery. No rendered game or Windows/physical result is claimed. The approved five-page architecture and the existing FFB backend are unchanged.
+
+
+## 2026-09-28 — Final hardware-follow-up validation and FFB boundary
+
+Extended capture checks through the native XInput POV masks, all four diagonals,
+confirmed legacy controller replacement and device loss while replacement is pending.
+Added real Unity Gamepad-state and raw HID hat-report fixtures for the Windows build
+gate. Portable checks pass; those Unity fixtures still require the owner's editor.
+The DD2 report-specific cause is not yet established by hardware evidence.
+
+Audited the existing DirectInput backend and kept its force calculations/lifecycle.
+Native effects already have finite leases, but the queued owner only acknowledges
+submission and ties output ownership to the active input. It lacks output-free
+initialization acknowledgement and independent bounded test ownership. Multi-input
+FFB stays disabled; no speculative endpoint association or motor test was added.
+Status text now distinguishes queued/driver-accepted requests from observed output.
+The new portable fake-backend harness passes 671 checks (including repeated mailbox
+operations), without loading a driver or producing force. DD2 mode/topology/endpoint
+inventory and physical direction/cleanup remain untested. HYP36Rforce was not evaluated
+without source/specification. The audit records the smallest required extension.
+
+All portable suites pass: 287 multi-input, 96 snapshots, 57 Controller, 46 UAT,
+34 diagnostic, nine packaging, native JSON/access and 671 fake-backend FFB checks.
+No Unity compilation, rendered player, Windows DLL build or new hardware run is
+claimed. UAT now covers direct capture, explicit replacement, POV ambiguity, signed
+menu axes, simultaneous Other Inputs, cancellation and original configuration recovery.
+Keep these local commits for review; do not push. After approved publication, rebuild
+both native DLLs and the full game on the owner's activated Windows editor, preserving
+existing generated DLL/settings changes. Original-game reports of digital input,
+limited multi-USB support and excessive FFB are not claimed fixed by this follow-up.

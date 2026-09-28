@@ -57,6 +57,7 @@ internal static class Idas3WheelFeedbackChecks
         var backend=new Backend();using(var output=new Idas3WheelFeedback(backend)){
             output.Update(settings,input,state,7,false,0);Check(backend.sends==0,"Menu sent wheel force");
             output.Update(settings,input,state,7,true,0);Check(backend.sends==1&&backend.lastDevice=="test-wheel","Unique active wheel was not selected");
+            Check(output.StatusText.Contains("request")&&output.StatusText.Contains("unverified"),"Accepted command falsely claimed physical output");
             Check(backend.last.driving&&backend.last.strength==settings.wheelFeedbackStrength,"The player's strength setting must reach the board");
             output.Update(settings,input,state,7,false,.02);Check(backend.stops==1,"Opening menu did not release wheel");
             state.simulationTicks++;output.Update(settings,input,state,7,true,.04);Check(backend.sends==2,"Driving did not resume output");

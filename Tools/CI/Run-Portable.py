@@ -10,6 +10,7 @@ commands=[('baseline',[sys.executable,'Tests/DeviceSnapshots/prepare_baseline.py
  ('probe-access',[sys.executable,'Diagnostics/DeviceIdentityProbe/Tests/audit.py','--access-only']),
  ('diagnostic-uat',['dotnet','run','--project','Diagnostics/DeviceIdentityProbe/Tests/ProbeTests.csproj','--property:UseSharedCompilation=false']),
  ('controller',['dotnet','run','--project','Tests/ControllerFoundation/ControllerFoundation.csproj','--property:UseSharedCompilation=false']),
+ ('feedback-owner',['dotnet','run','--project','Tests/FeedbackOwner/FeedbackOwner.csproj','--property:UseSharedCompilation=false']),
  ('snapshots',['dotnet','run','--project','Tests/DeviceSnapshots/DeviceSnapshots.csproj','--property:UseSharedCompilation=false']),
  ('multi-input',['dotnet','run','--project','Tests/MultiInput/MultiInput.csproj','--property:UseSharedCompilation=false']),
  ('native-json-compile',['clang++','-std=c++17','Diagnostics/DeviceIdentityProbe/Tests/json_test.cpp','-o',str(out/'json-test')]),
