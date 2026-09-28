@@ -1,6 +1,11 @@
 name: Multi-input sample validation
 on:
   workflow_dispatch:
+    inputs:
+      require_player:
+        description: 'Require complete Unity packages (fails if activation is unavailable)'
+        type: boolean
+        default: false
   push:
     branches: [ID3-Multi-device-input]
     paths: ['Assets/**', 'Native/**', 'RuntimeAssets/**', 'Packages/**', 'ProjectSettings/**', 'Diagnostics/**', 'Tests/**', 'Tools/**', 'docs/**', 'Build Native.cmd', '.github/workflows/multi-input-sample.yml']
@@ -66,7 +71,7 @@ jobs:
           path: Verification/ci/native
           retention-days: 14
   unity-readiness:
-    name: Unity activation readiness (not a build)
+    name: Check Unity availability (success does not mean activated)
     runs-on: ubuntu-24.04
     outputs:
       ready: ${{ steps.check.outputs.ready }}
@@ -97,7 +102,7 @@ jobs:
   unity:
     name: Windows Unity ${{ matrix.kind }} validation and package
     needs: [native, unity-readiness]
-    if: ${{ always() && !cancelled() && needs.unity-readiness.outputs.ready == 'true' }}
+    if: ${{ always() && !cancelled() && needs.native.result == 'success' && needs.unity-readiness.outputs.ready == 'true' }}
     runs-on: windows-2022
     timeout-minutes: 180
     strategy:
@@ -163,7 +168,7 @@ jobs:
           path: Verification/ci/${{ matrix.kind }}
           retention-days: 7
   result:
-    name: Sample readiness (all required builds)
+    name: Validation summary (see Unity build status)
     needs: [portable, native, unity-readiness, unity]
     if: always()
     runs-on: ubuntu-24.04
@@ -173,6 +178,7 @@ jobs:
           NATIVE: ${{ needs.native.result }}
           READY: ${{ needs.unity-readiness.outputs.ready }}
           UNITY: ${{ needs.unity.result }}
+          REQUIRE_PLAYER: ${{ inputs.require_player == true }}
           EVENT: ${{ github.event_name }}
           SHA: ${{ github.sha }}
         shell: bash
@@ -183,7 +189,11 @@ jobs:
           elif [[ "$EVENT" == pull_request ]]; then
             echo 'SKIPPED Unity by trust policy. This PR check is not a playable-build result.' >> "$GITHUB_STEP_SUMMARY"
           elif [[ "$READY" != true ]]; then
-            echo 'BLOCKED: Unity activation prerequisites missing; no complete sample build.' >> "$GITHUB_STEP_SUMMARY"; exit 1
+            echo 'CODE CHECKS PASSED. PLAYER BUILD BLOCKED: Unity activation prerequisites missing. No complete sample package or Unity validation was produced; hardware NOT TESTED.' >> "$GITHUB_STEP_SUMMARY"
+            if [[ "$REQUIRE_PLAYER" == true ]]; then
+              echo 'FAILED: this manual run explicitly requires complete Unity packages.' >> "$GITHUB_STEP_SUMMARY"
+              exit 1
+            fi
           elif [[ "$UNITY" != success ]]; then
             echo 'FAILED: inspect the separate probe/game jobs and failure logs.' >> "$GITHUB_STEP_SUMMARY"; exit 1
           else
