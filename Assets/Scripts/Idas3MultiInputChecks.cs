@@ -20,7 +20,7 @@ public static class Idas3MultiInputChecks {
     public static void Run(){
         checks=0;string root=Path.Combine(Path.GetTempPath(),"id3-multi-unity-"+Guid.NewGuid().ToString("N"));
         var wheel=InputSystem.AddDevice<Gamepad>();var pedals=InputSystem.AddDevice<Gamepad>();var shifter=InputSystem.AddDevice<Gamepad>();
-        var go=new GameObject("Multi-input menu checks");double now=0;
+        var go=new GameObject("Multi-input menu checks");double now=Time.realtimeSinceStartupAsDouble;
         using(var provider=new Idas3ControllerDevices(()=>now,(uint slot,out Idas3Native.PadState p)=>{p=default;return 1167;},d=>d==wheel||d==pedals||d==shifter))try{
             provider.Initialize(root);var b=new B();b.Initialize(root);b.ApplyDraft();string legacy=File.ReadAllText(b.FilePath);
             var options=new Idas3GameOptions(new Platform());options.Initialize(root);
@@ -30,7 +30,7 @@ public static class Idas3MultiInputChecks {
             // adapter; rendered navigation is a separate player acceptance check.
             b.BeginWheelSetup();
             Check(b.ExperimentalDraftEnabled&&!b.ExperimentalEnabled,"setup remains draft until Save Changes");
-            void Poll(){now+=.02;InputSystem.Update();provider.Tick(false);b.Poll(_=>false,default,now,provider.Controls,provider.Snapshot);}
+            void Poll(){now=Math.Max(now+.02,Time.realtimeSinceStartupAsDouble);InputSystem.Update();provider.Tick(false);b.Poll(_=>false,default,now,provider.Controls,provider.Snapshot);}
             Idas3EndpointSnapshot Endpoint(Gamepad pad)=>provider.Snapshot.Endpoints.First(e=>e.Identity.Fields.Any(f=>f.Name=="runtimeId"&&f.Value==pad.deviceId.ToString()));
             bool Assign(B.ActionId action,Gamepad pad,string path,int direction,float rest){var e=Endpoint(pad);return b.TrySetExperimentalControl(action,e.Token,e.ConnectionGeneration,path,direction,rest);}
             Poll();Check(Assign(B.ActionId.SteerLeft,wheel,"leftStick/x",-1,0)&&Assign(B.ActionId.SteerRight,wheel,"leftStick/x",1,0),"wheel pair");
@@ -54,13 +54,41 @@ public static class Idas3MultiInputChecks {
             var navigationReload = new B(); navigationReload.Initialize(root);
             Check(navigationReload.MenuBindingName(B.MenuActionId.Confirm).Contains("reassign"), "actual JsonUtility reload retains menu preference, not session identity");
             menu.SelectControllerPage(2); services.RebindMenu(B.MenuActionId.Up);
-            Check(menu.BindingChoiceVisible, "Menu adapter opens shared chooser"); menu.Back();
+            Check(menu.BindingChoiceVisible, "Menu adapter opens shared chooser");
+            string savedExperimental = File.ReadAllText(b.ExperimentalFilePath);
+            string confirmAssignment = b.MenuBindingName(B.MenuActionId.Confirm);
+            string priorUpAssignment = b.MenuBindingName(B.MenuActionId.Up);
+            var captureRevision = b.CaptureRevision;
+            InputSystem.QueueStateEvent(wheel, new GamepadState());
+            InputSystem.QueueStateEvent(pedals, new GamepadState());
+            InputSystem.QueueStateEvent(shifter, new GamepadState());
+            Poll();
+            menu.Activate();
+            Check(b.IsCapturing && !menu.BindingChoiceVisible, "Menu Rebind starts the shared capture");
+            Poll();
+            InputSystem.QueueStateEvent(shifter, new GamepadState().WithButton(GamepadButton.North));
+            Poll();
+            Check(!b.IsCapturing && b.CaptureRevision > captureRevision && b.MenuBindingName(B.MenuActionId.Up) != priorUpAssignment,
+                "Menu capture assigns a fresh control from another device");
+            InputSystem.QueueStateEvent(shifter, new GamepadState()); Poll();
+            services.RebindMenu(B.MenuActionId.Up);
+            Check(menu.BindingChoiceVisible, "Menu chooser reopens after release");
+            menu.Navigate(1); menu.Activate();
+            Check(b.MenuBindingName(B.MenuActionId.Up) == priorUpAssignment
+                && b.MenuBindingName(B.MenuActionId.Confirm) == confirmAssignment
+                && File.ReadAllText(b.ExperimentalFilePath) == savedExperimental,
+                "Menu Clear preserves unrelated assignments and saved bytes");
             menu.SelectControllerPage(3);Check(menu.TestingControls&&menu.BlocksGameInput,"testing blocks gameplay submission");
             Check(b.ExperimentalBlocksFeedback,"experimental ownership unresolved: FFB disabled");
             var reload=new B();reload.Initialize(root);reload.Poll(_=>false,default,now,null,provider.Snapshot);game=default;reload.ApplyDriving(ref game);
             Check(reload.ExperimentalEnabled&&game.rightTrigger==0&&reload.BindingName(B.ActionId.Accelerate,B.Slot.Controller).Contains("reassign"),"Unity JsonUtility preserves preferences without restoring session identity");
             InputSystem.QueueStateEvent(wheel,new GamepadState()); InputSystem.QueueStateEvent(shifter,new GamepadState()); Poll();
-            InputSystem.QueueStateEvent(wheel,new GamepadState{leftStick=new Vector2(-.5f,0)}); InputSystem.QueueStateEvent(shifter,new GamepadState().WithButton(GamepadButton.South)); Poll();
+            InputSystem.QueueStateEvent(wheel,new GamepadState{leftStick=new Vector2(-.5f,0)});
+            InputSystem.QueueStateEvent(pedals,new GamepadState{rightTrigger=.75f,leftTrigger=.25f});
+            InputSystem.QueueStateEvent(shifter,new GamepadState().WithButton(GamepadButton.South)); Poll();
+            game=default;b.ApplyDriving(ref game);
+            Check(game.rightTrigger==191&&game.leftTrigger==64,
+                "removal fixture has live pedal input after chooser checks");
             var endpoint=Endpoint(pedals);InputSystem.RemoveDevice(pedals);Poll();game=default;b.ApplyDriving(ref game);
             Check(game.rightTrigger==0&&game.leftTrigger==0&&game.thumbLX==-16384&&game.padButtons==0x2000,"removal only neutralizes affected actions");
             InputSystem.AddDevice(pedals);Poll();Check(!b.HasControllerAssignment(B.ActionId.Accelerate),"reconnect requires explicit reassignment");

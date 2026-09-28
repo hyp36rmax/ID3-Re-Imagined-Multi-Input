@@ -88,6 +88,37 @@ internal static class SetupChecks
 
             Poll();
             setup.Begin(now);
+            setup.Cancel();
+            Check(bindings.SuppressInput && !bindings.IsCapturing,
+                "cancelling active setup keeps the release guard without an active capture");
+            pressedKey = KeyCode.Escape;
+            Poll();
+            Check(bindings.SuppressInput, "held cancel remains guarded on the next host poll");
+            pressedKey = KeyCode.None;
+            Poll();
+            Check(!bindings.SuppressInput && File.ReadAllText(bindings.FilePath) == saved,
+                "neutral host poll restores interaction without saving or changing ownership");
+            var priorDraft = bindings.Draft.Clone();
+            bindings.BeginCapture(B.ActionId.Camera, B.Slot.Primary, now);
+            Poll();
+            pressedKey = KeyCode.R;
+            Poll();
+            var reboundDraft = priorDraft.Clone();
+            reboundDraft.actions[(int)B.ActionId.Camera].key1 = KeyCode.R;
+            Check(!bindings.IsCapturing && B.Equivalent(reboundDraft, bindings.Draft),
+                "rebinding after setup cancellation changes only the requested keyboard slot");
+            pressedKey = KeyCode.None;
+            Poll();
+            Check(bindings.ClearDraft(B.ActionId.Camera, B.Slot.Primary), "clear remains available after rebinding");
+            reboundDraft.actions[(int)B.ActionId.Camera].key1 = KeyCode.None;
+            Check(B.Equivalent(reboundDraft, bindings.Draft), "clear preserves unrelated assignments");
+            bindings.BeginCapture(B.ActionId.Camera, B.Slot.Primary, now);
+            bindings.CancelCapture();
+            Poll();
+            Check(B.Equivalent(reboundDraft, bindings.Draft) && File.ReadAllText(bindings.FilePath) == saved,
+                "cancelling another capture keeps draft edits and does not persist them");
+            bindings.CancelEdit(false);
+            setup.Begin(now);
             Poll();
             Check(setup.State == Idas3SetupSession.Stage.Capturing && setup.Deadline == now - .02 + 6, "wizard starts six-second capture immediately after type choice");
             wheel.value = .7f;

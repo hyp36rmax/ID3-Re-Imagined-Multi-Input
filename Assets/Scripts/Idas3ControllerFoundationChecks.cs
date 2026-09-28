@@ -27,7 +27,15 @@ public static class Idas3ControllerFoundationChecks
             devices.Select("automatic");string deviceFile=Path.Combine(root,"controller-device.json"),savedDevice=File.ReadAllText(deviceFile);
             bindings.BeginEdit();Check(bindings.ApplyDraft(),"initial binding fixture");string savedBindings=File.ReadAllText(bindings.FilePath);
             var menu=go.AddComponent<Idas3PauseMenu>();menu.Initialize(options);menu.InitializeBindings(bindings);menu.InitializeControllerDevices(devices);menu.OpenAttractOptions();menu.SelectTab(3);
-            bindings.Poll(k=>false,default,0,devices.Controls,devices.Snapshot);
+            double now = Time.realtimeSinceStartupAsDouble;
+            void Poll(KeyCode key = KeyCode.None)
+            {
+                now = Math.Max(now + .02, Time.realtimeSinceStartupAsDouble);
+                InputSystem.Update();
+                devices.Tick(false);
+                bindings.Poll(k => k == key, default, now, devices.Controls, devices.Snapshot);
+            }
+            Poll();
             var services=(IIdas3ControlsServices)menu;
             for(int page=0;page<5;++page){
                 menu.SelectControllerPage(page);
@@ -40,7 +48,41 @@ public static class Idas3ControllerFoundationChecks
             menu.SelectControllerPage(1);menu.SelectControllerPage(2);
             Check(Idas3ControlBindings.Equivalent(sharedDraft,bindings.Draft)&&File.ReadAllText(bindings.FilePath)==savedBindings,"navigation preserves pending edits and saved bytes");
             services.Rebind(Idas3ControlBindings.ActionId.Camera,Idas3ControlBindings.Slot.Primary);
-            Check(menu.BindingChoiceVisible,"Bindings uses the existing rebind/clear chooser");menu.Back();
+            // Quick Setup cancellation restores its checkpoint and guards the
+            // cancelling input. A synchronous batch check must supply the next
+            // released sample just as the host does; opening the chooser is not
+            // allowed to bypass that guard.
+            Check(bindings.SuppressInput && !menu.BindingChoiceVisible,
+                "setup cancellation blocks immediate chooser activation");
+            Poll(KeyCode.Escape);
+            services.Rebind(Idas3ControlBindings.ActionId.Camera, Idas3ControlBindings.Slot.Primary);
+            Check(!menu.BindingChoiceVisible, "held cancel cannot reopen the chooser");
+            Poll();
+            Check(!bindings.SuppressInput, "released sample restores binding interaction");
+            services.Rebind(Idas3ControlBindings.ActionId.Camera, Idas3ControlBindings.Slot.Primary);
+            Check(menu.BindingChoiceVisible, "Bindings opens Rebind/Clear after release");
+            menu.Activate();
+            Check(bindings.IsCapturing && !menu.BindingChoiceVisible, "Rebind starts shared capture");
+            Poll();
+            Poll(KeyCode.R);
+            var rebound = sharedDraft.Clone();
+            rebound.actions[(int)Idas3ControlBindings.ActionId.Camera].key1 = KeyCode.R;
+            Check(!bindings.IsCapturing && Idas3ControlBindings.Equivalent(rebound, bindings.Draft),
+                "fresh key changes only the requested slot");
+            Poll();
+            services.Rebind(Idas3ControlBindings.ActionId.Camera, Idas3ControlBindings.Slot.Primary);
+            menu.Navigate(1); // CLEAR, not a legacy action-row coordinate.
+            menu.Activate();
+            Check(!menu.BindingChoiceVisible && Idas3ControlBindings.Equivalent(sharedDraft, bindings.Draft),
+                "Clear removes only the selected slot through the chooser");
+            services.Rebind(Idas3ControlBindings.ActionId.Camera, Idas3ControlBindings.Slot.Primary);
+            menu.Activate();
+            Check(bindings.IsCapturing, "capture remains available after clearing");
+            menu.Back();
+            Check(!bindings.IsCapturing && Idas3ControlBindings.Equivalent(sharedDraft, bindings.Draft)
+                && File.ReadAllText(bindings.FilePath) == savedBindings,
+                "capture cancellation preserves the draft and saved file");
+            Poll();
             bindings.CancelEdit(false);
             menu.SelectControllerPage(0);Check(menu.SettingUpControls,"Quick Setup opens immediately");menu.Back();
             Check(File.ReadAllText(bindings.FilePath)==savedBindings&&!bindings.ExperimentalDraftEnabled,"cancel preserves saved settings");
