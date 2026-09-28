@@ -357,6 +357,10 @@ internal static class SetupChecks
             legacy.EvaluateMenuNavigation(2, true, false);
             Check(legacy.MenuEvents == 0, "driving keyboard assignments do not navigate menus");
             legacy.Poll(_ => false, default, now);
+            legacy.Poll(key => key == KeyCode.F1, default, now);
+            legacy.EvaluateMenuNavigation(100, true, false);
+            Check(legacy.RawOnlineHeld && legacy.MenuEvents == 0, "dedicated Online command remains available at frontend without navigation aliases");
+            legacy.Poll(_ => false, default, now);
             legacy.BeginMenuCapture(B.MenuActionId.Up, now);
             legacy.Poll(_ => false, default, now + .02);
             legacy.Poll(key => key == KeyCode.R, default, now + .04);

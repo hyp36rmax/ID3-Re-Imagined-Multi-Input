@@ -90,7 +90,7 @@ public sealed partial class Idas3ControlBindings
     public string CaptureError { get; private set; }
     public bool SuppressInput => IsCapturing || releaseBlocked;
     internal bool RawPauseHeld => !menuWasPreview && MenuEvent(MenuActionId.Pause);
-    internal bool RawOnlineHeld => menuContext == 0 && !ExplicitMenuControlHeld &&
+    internal bool RawOnlineHeld => (menuContext == 0 || menuContext >= 100) && !ExplicitMenuControlHeld &&
         (Held(KeyCode.F1) || ActionHeld(ActionId.Online));
     public bool PauseHeld => !SuppressInput && RawPauseHeld;
     public bool OnlineHeld => !SuppressInput && RawOnlineHeld;
